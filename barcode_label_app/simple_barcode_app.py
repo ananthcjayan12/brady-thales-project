@@ -35,10 +35,6 @@ class EnhancedBarcodeLabelApp:
             'height': 200,
             'company_text': 'CYIENT',
             'dlm_text': 'DLM',
-            'part_bg_color': 'lightgreen',
-            'font_size_large': 16,
-            'font_size_medium': 12,
-            'font_size_small': 10,
             'qr_size': 80,
             'part_x': 70,
             'part_y': 35,
@@ -340,7 +336,7 @@ class EnhancedBarcodeLabelApp:
         self.update_preview()
     
     def generate_label_image(self):
-        """Generate label image matching your design"""
+        """Generate label image matching the reference layout exactly"""
         settings = self.label_settings
         width = settings['width']
         height = settings['height']
@@ -351,10 +347,10 @@ class EnhancedBarcodeLabelApp:
         
         # Load fonts
         try:
-            font_large = ImageFont.truetype("arial.ttf", settings['font_size_large'])
-            font_medium = ImageFont.truetype("arial.ttf", settings['font_size_medium'])
-            font_small = ImageFont.truetype("arial.ttf", settings['font_size_small'])
-            font_bold = ImageFont.truetype("arialbd.ttf", settings['font_size_medium'])
+            font_large = ImageFont.truetype("arial.ttf", 18)  # For CYIENT
+            font_medium = ImageFont.truetype("arial.ttf", 14)  # For P/N, PID, etc.
+            font_small = ImageFont.truetype("arial.ttf", 12)   # For DLM and other text
+            font_bold = ImageFont.truetype("arialbd.ttf", 14)  # For bold text
         except:
             font_large = ImageFont.load_default()
             font_medium = font_large
@@ -364,49 +360,40 @@ class EnhancedBarcodeLabelApp:
         # Draw border
         draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
         
-        # Draw company name (CYIENT)
-        draw.text((10, 10), settings['company_text'], fill='black', font=font_large)
+        # Position constants based on reference image layout
+        margin_left = 15
+        margin_top = 15
         
-        # Draw sub text (DLM)
-        company_width = draw.textlength(settings['company_text'], font=font_large)
-        draw.text((company_width + 15, 15), settings['dlm_text'], fill='black', font=font_small)
+        # 1. CYIENT logo/text in top left
+        draw.text((margin_left, margin_top), settings['company_text'], fill='black', font=font_large)
+        
+        # 2. DLM subtitle positioned to the right of CYIENT (same line)
+        draw.text((margin_left + 100, margin_top + 3), settings['dlm_text'], fill='black', font=font_small)
         
         if self.current_excel_data:
             # Get part number
             part_number = None
             for key, value in self.current_excel_data.items():
-                if 'CPN' in key.upper() or 'PART' in key.upper():
+                if 'CPN' in key.upper() or 'PART' in key.upper() or 'P/N' in key.upper():
                     part_number = str(value)
                     break
             
+            # 3. P/N (Part Number) - positioned below logo area
             if part_number:
-                # Draw part number with green background (like your image)
                 part_text = f"P/N : {part_number}"
-                text_width = draw.textlength(part_text, font=font_bold)
-                
-                # Green background box
-                box_padding = 5
-                draw.rectangle([
-                    settings['part_x'], settings['part_y'],
-                    settings['part_x'] + text_width + box_padding * 2,
-                    settings['part_y'] + 25
-                ], fill=settings['part_bg_color'], outline='black')
-                
-                # Part number text
-                draw.text((settings['part_x'] + box_padding, settings['part_y'] + 5), 
-                         part_text, fill='black', font=font_bold)
+                draw.text((margin_left + 70, margin_top + 35), part_text, fill='black', font=font_bold)
             
             # Get product description
             product_desc = None
             for key, value in self.current_excel_data.items():
-                if 'DESC' in key.upper() or 'PRODUCT' in key.upper():
+                if 'DESC' in key.upper() or 'PRODUCT' in key.upper() or 'PID' in key.upper():
                     product_desc = str(value)
                     break
             
+            # 4. PID (Product ID) - positioned below P/N
             if product_desc:
-                # Draw PID line (like VSYS-BOX CVCS in your image)
-                draw.text((10, settings['part_y'] + 35), f"PID : {product_desc[:25]}", 
-                         fill='black', font=font_small)
+                pid_text = f"PID : {product_desc[:30]}"
+                draw.text((margin_left, margin_top + 65), pid_text, fill='black', font=font_medium)
             
             # Get serial number
             serial_number = None
@@ -415,22 +402,43 @@ class EnhancedBarcodeLabelApp:
                     serial_number = str(value)
                     break
             
+            # 5. S/N (Serial Number) with barcode - positioned below PID
             if serial_number:
-                # Draw serial number section
-                draw.text((10, settings['serial_y']), f"S/N :", fill='black', font=font_small)
+                sn_y_pos = margin_top + 100
+                draw.text((margin_left, sn_y_pos), "S/N :", fill='black', font=font_medium)
                 
-                # Create barcode for serial number
+                # Create linear barcode for serial number using python-barcode
                 try:
-                    import code128
-                    barcode_img = code128.image(serial_number, height=20)
-                    barcode_img = barcode_img.resize((150, 20))
-                    img.paste(barcode_img, (60, settings['serial_y']))
-                except:
-                    # Fallback - just draw the serial number
-                    draw.text((60, settings['serial_y']), serial_number, fill='black', font=font_small)
+                    from barcode import Code128
+                    from barcode.writer import ImageWriter
+                    from io import BytesIO
+                    
+                    # Generate Code128 barcode
+                    code = Code128(serial_number, writer=ImageWriter())
+                    barcode_buffer = BytesIO()
+                    code.write(barcode_buffer)
+                    barcode_buffer.seek(0)
+                    
+                    # Load and resize barcode
+                    barcode_img = Image.open(barcode_buffer)
+                    # Resize to fit the label better
+                    barcode_img = barcode_img.resize((200, 35))
+                    img.paste(barcode_img, (margin_left + 45, sn_y_pos - 5))
+                    
+                except ImportError:
+                    # Try alternative barcode library
+                    try:
+                        import code128
+                        barcode_img = code128.image(serial_number, height=25)
+                        barcode_img = barcode_img.resize((200, 25))
+                        img.paste(barcode_img, (margin_left + 45, sn_y_pos))
+                    except:
+                        # Fallback - draw barcode-like pattern
+                        draw.text((margin_left + 45, sn_y_pos), "|||||||||||||||||||||||||||", fill='black', font=font_small)
+                        draw.text((margin_left + 45, sn_y_pos + 15), serial_number, fill='black', font=font_small)
                 
                 # Serial number text below barcode
-                draw.text((60, settings['serial_y'] + 25), serial_number, fill='black', font=font_small)
+                draw.text((margin_left + 45, sn_y_pos + 40), serial_number, fill='black', font=font_small)
             
             # Get quantity
             qty = None
@@ -442,32 +450,15 @@ class EnhancedBarcodeLabelApp:
             if not qty:
                 qty = "1"  # Default
             
-            draw.text((10, settings['qty_y']), f"QTY : {qty}", fill='black', font=font_small)
-            
-            # Add QR code (top right)
-            if part_number:
-                qr_data = f"P/N:{part_number}"
-                if serial_number:
-                    qr_data += f"\nS/N:{serial_number}"
-                
-                qr = qrcode.QRCode(version=1, box_size=3, border=1)
-                qr.add_data(qr_data)
-                qr.make(fit=True)
-                qr_img = qr.make_image(fill_color="black", back_color="white")
-                qr_img = qr_img.resize((settings['qr_size'], settings['qr_size']))
-                img.paste(qr_img, (width - settings['qr_size'] - 10, 10))
+            # 6. QTY (Quantity) - positioned at bottom
+            draw.text((margin_left, height - 35), f"QTY : {qty}", fill='black', font=font_medium)
         
         else:
-            # Sample data when no lookup performed
-            draw.text((settings['part_x'] + 5, settings['part_y'] + 5), 
-                     "P/N : Sample Part", fill='black', font=font_bold)
-            draw.rectangle([settings['part_x'], settings['part_y'], 
-                          settings['part_x'] + 150, settings['part_y'] + 25], 
-                         fill=settings['part_bg_color'], outline='black')
-            
-            draw.text((10, settings['part_y'] + 35), "PID : Sample Product", fill='black', font=font_small)
-            draw.text((10, settings['serial_y']), "S/N : Sample Serial", fill='black', font=font_small)
-            draw.text((10, settings['qty_y']), "QTY : 1", fill='black', font=font_small)
+            # Sample data when no lookup performed - following same layout
+            draw.text((margin_left + 70, margin_top + 35), "P/N : Sample Part", fill='black', font=font_bold)
+            draw.text((margin_left, margin_top + 65), "PID : Sample Product", fill='black', font=font_medium)
+            draw.text((margin_left, margin_top + 100), "S/N : Sample Serial", fill='black', font=font_medium)
+            draw.text((margin_left, height - 35), "QTY : 1", fill='black', font=font_medium)
         
         return img
     
