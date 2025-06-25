@@ -1,0 +1,26 @@
+# Core GUI and System Libraries
+# tkinter is usually included with Python but may need separate installation on some systems
+# macOS with Homebrew Python: brew install python-tk
+# Ubuntu/Debian: sudo apt-get install python3-tk
+# Windows: tkinter should be included by default
+
+# Image Processing and Graphics
+pillow>=10.0.0
+
+# Data Processing and Excel Handling
+pandas>=2.0.0
+openpyxl>=3.1.0
+
+# QR Code Generation
+qrcode[pil]>=7.4.0
+
+# Additional dependencies that might be needed
+numpy>=1.24.0  # Required by pandas
+python-dateutil>=2.8.0  # Required by pandas
+
+# Optional: For better font handling on different systems
+# fonttools>=4.40.0
+
+# Development/Testing (optional)
+# pytest>=7.0.0
+# black>=23.0.0 
