@@ -29,19 +29,25 @@ class EnhancedBarcodeLabelApp:
         self.current_excel_data = None
         self.current_label = None
         
-        # Label settings - adjustable
+        # Label settings - all adjustable
         self.label_settings = {
             'width': 400,
             'height': 200,
             'company_text': 'CYIENT',
             'dlm_text': 'DLM',
-            'qr_size': 80,
-            'part_x': 70,
-            'part_y': 35,
-            'serial_x': 10,
-            'serial_y': 100,
-            'qty_x': 10,
-            'qty_y': 160
+            'company_x': 15,
+            'company_y': 15,
+            'dlm_x': 100,
+            'dlm_y': 18,
+            'part_x': 15,
+            'part_y': 50,
+            'pid_x': 15,
+            'pid_y': 80,
+            'serial_x': 15,
+            'serial_y': 115,
+            'qty_x': 15,
+            'qty_y': 165,
+            'qr_size': 80
         }
         
         # Load Excel file
@@ -194,22 +200,71 @@ class EnhancedBarcodeLabelApp:
         pos_frame = ttk.LabelFrame(scrollable_frame, text="Positions", padding="5")
         pos_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # Part number position
-        ttk.Label(pos_frame, text="Part X:").grid(row=0, column=0, sticky=tk.W)
-        self.part_x_var = tk.IntVar(value=self.label_settings['part_x'])
-        ttk.Scale(pos_frame, from_=0, to=300, variable=self.part_x_var, 
+        # Company position
+        ttk.Label(pos_frame, text="Company X:").grid(row=0, column=0, sticky=tk.W)
+        self.company_x_var = tk.IntVar(value=self.label_settings['company_x'])
+        ttk.Scale(pos_frame, from_=0, to=200, variable=self.company_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
         
-        ttk.Label(pos_frame, text="Part Y:").grid(row=1, column=0, sticky=tk.W)
-        self.part_y_var = tk.IntVar(value=self.label_settings['part_y'])
-        ttk.Scale(pos_frame, from_=0, to=150, variable=self.part_y_var, 
+        ttk.Label(pos_frame, text="Company Y:").grid(row=1, column=0, sticky=tk.W)
+        self.company_y_var = tk.IntVar(value=self.label_settings['company_y'])
+        ttk.Scale(pos_frame, from_=0, to=100, variable=self.company_y_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
         
-        # QR code size
-        ttk.Label(pos_frame, text="QR Size:").grid(row=2, column=0, sticky=tk.W)
-        self.qr_size_var = tk.IntVar(value=self.label_settings['qr_size'])
-        ttk.Scale(pos_frame, from_=40, to=120, variable=self.qr_size_var, 
+        # DLM position
+        ttk.Label(pos_frame, text="DLM X:").grid(row=2, column=0, sticky=tk.W)
+        self.dlm_x_var = tk.IntVar(value=self.label_settings['dlm_x'])
+        ttk.Scale(pos_frame, from_=0, to=200, variable=self.dlm_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW)
+        
+        ttk.Label(pos_frame, text="DLM Y:").grid(row=3, column=0, sticky=tk.W)
+        self.dlm_y_var = tk.IntVar(value=self.label_settings['dlm_y'])
+        ttk.Scale(pos_frame, from_=0, to=100, variable=self.dlm_y_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=3, column=1, sticky=tk.EW)
+        
+        # Part number position
+        ttk.Label(pos_frame, text="Part X:").grid(row=4, column=0, sticky=tk.W)
+        self.part_x_var = tk.IntVar(value=self.label_settings['part_x'])
+        ttk.Scale(pos_frame, from_=0, to=300, variable=self.part_x_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=4, column=1, sticky=tk.EW)
+        
+        ttk.Label(pos_frame, text="Part Y:").grid(row=5, column=0, sticky=tk.W)
+        self.part_y_var = tk.IntVar(value=self.label_settings['part_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.part_y_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=5, column=1, sticky=tk.EW)
+        
+        # PID position
+        ttk.Label(pos_frame, text="PID X:").grid(row=6, column=0, sticky=tk.W)
+        self.pid_x_var = tk.IntVar(value=self.label_settings['pid_x'])
+        ttk.Scale(pos_frame, from_=0, to=300, variable=self.pid_x_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=6, column=1, sticky=tk.EW)
+        
+        ttk.Label(pos_frame, text="PID Y:").grid(row=7, column=0, sticky=tk.W)
+        self.pid_y_var = tk.IntVar(value=self.label_settings['pid_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pid_y_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=7, column=1, sticky=tk.EW)
+        
+        # Serial position
+        ttk.Label(pos_frame, text="Serial X:").grid(row=8, column=0, sticky=tk.W)
+        self.serial_x_var = tk.IntVar(value=self.label_settings['serial_x'])
+        ttk.Scale(pos_frame, from_=0, to=300, variable=self.serial_x_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=8, column=1, sticky=tk.EW)
+        
+        ttk.Label(pos_frame, text="Serial Y:").grid(row=9, column=0, sticky=tk.W)
+        self.serial_y_var = tk.IntVar(value=self.label_settings['serial_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.serial_y_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=9, column=1, sticky=tk.EW)
+        
+        # QTY position
+        ttk.Label(pos_frame, text="QTY X:").grid(row=10, column=0, sticky=tk.W)
+        self.qty_x_var = tk.IntVar(value=self.label_settings['qty_x'])
+        ttk.Scale(pos_frame, from_=0, to=300, variable=self.qty_x_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=10, column=1, sticky=tk.EW)
+        
+        ttk.Label(pos_frame, text="QTY Y:").grid(row=11, column=0, sticky=tk.W)
+        self.qty_y_var = tk.IntVar(value=self.label_settings['qty_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.qty_y_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=11, column=1, sticky=tk.EW)
         
         pos_frame.columnconfigure(1, weight=1)
         
@@ -264,11 +319,20 @@ class EnhancedBarcodeLabelApp:
         self.label_settings.update({
             'width': self.width_var.get(),
             'height': self.height_var.get(),
+            'company_text': self.company_var.get(),
+            'dlm_text': self.dlm_var.get(),
+            'company_x': self.company_x_var.get(),
+            'company_y': self.company_y_var.get(),
+            'dlm_x': self.dlm_x_var.get(),
+            'dlm_y': self.dlm_y_var.get(),
             'part_x': self.part_x_var.get(),
             'part_y': self.part_y_var.get(),
-            'qr_size': self.qr_size_var.get(),
-            'company_text': self.company_var.get(),
-            'dlm_text': self.dlm_var.get()
+            'pid_x': self.pid_x_var.get(),
+            'pid_y': self.pid_y_var.get(),
+            'serial_x': self.serial_x_var.get(),
+            'serial_y': self.serial_y_var.get(),
+            'qty_x': self.qty_x_var.get(),
+            'qty_y': self.qty_y_var.get()
         })
     
     def browse_excel(self):
@@ -360,15 +424,11 @@ class EnhancedBarcodeLabelApp:
         # Draw border
         draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
         
-        # Position constants based on reference image layout
-        margin_left = 15
-        margin_top = 15
+        # 1. CYIENT logo/text - using adjustable position
+        draw.text((settings['company_x'], settings['company_y']), settings['company_text'], fill='black', font=font_large)
         
-        # 1. CYIENT logo/text in top left
-        draw.text((margin_left, margin_top), settings['company_text'], fill='black', font=font_large)
-        
-        # 2. DLM subtitle positioned to the right of CYIENT (same line)
-        draw.text((margin_left + 100, margin_top + 3), settings['dlm_text'], fill='black', font=font_small)
+        # 2. DLM subtitle - using adjustable position
+        draw.text((settings['dlm_x'], settings['dlm_y']), settings['dlm_text'], fill='black', font=font_small)
         
         if self.current_excel_data:
             # Get part number
@@ -378,10 +438,10 @@ class EnhancedBarcodeLabelApp:
                     part_number = str(value)
                     break
             
-            # 3. P/N (Part Number) - positioned below logo area
+            # 3. P/N (Part Number) - using adjustable position
             if part_number:
                 part_text = f"P/N : {part_number}"
-                draw.text((margin_left + 70, margin_top + 35), part_text, fill='black', font=font_bold)
+                draw.text((settings['part_x'], settings['part_y']), part_text, fill='black', font=font_bold)
             
             # Get product description
             product_desc = None
@@ -390,10 +450,10 @@ class EnhancedBarcodeLabelApp:
                     product_desc = str(value)
                     break
             
-            # 4. PID (Product ID) - positioned below P/N
+            # 4. PID (Product ID) - using adjustable position
             if product_desc:
                 pid_text = f"PID : {product_desc[:30]}"
-                draw.text((margin_left, margin_top + 65), pid_text, fill='black', font=font_medium)
+                draw.text((settings['pid_x'], settings['pid_y']), pid_text, fill='black', font=font_medium)
             
             # Get serial number
             serial_number = None
@@ -402,10 +462,9 @@ class EnhancedBarcodeLabelApp:
                     serial_number = str(value)
                     break
             
-            # 5. S/N (Serial Number) with barcode - positioned below PID
+            # 5. S/N (Serial Number) with barcode - using adjustable position
             if serial_number:
-                sn_y_pos = margin_top + 100
-                draw.text((margin_left, sn_y_pos), "S/N :", fill='black', font=font_medium)
+                draw.text((settings['serial_x'], settings['serial_y']), "S/N :", fill='black', font=font_medium)
                 
                 # Create linear barcode for serial number using python-barcode
                 try:
@@ -423,7 +482,7 @@ class EnhancedBarcodeLabelApp:
                     barcode_img = Image.open(barcode_buffer)
                     # Resize to fit the label better
                     barcode_img = barcode_img.resize((200, 35))
-                    img.paste(barcode_img, (margin_left + 45, sn_y_pos - 5))
+                    img.paste(barcode_img, (settings['serial_x'] + 45, settings['serial_y'] - 5))
                     
                 except ImportError:
                     # Try alternative barcode library
@@ -431,14 +490,14 @@ class EnhancedBarcodeLabelApp:
                         import code128
                         barcode_img = code128.image(serial_number, height=25)
                         barcode_img = barcode_img.resize((200, 25))
-                        img.paste(barcode_img, (margin_left + 45, sn_y_pos))
+                        img.paste(barcode_img, (settings['serial_x'] + 45, settings['serial_y']))
                     except:
                         # Fallback - draw barcode-like pattern
-                        draw.text((margin_left + 45, sn_y_pos), "|||||||||||||||||||||||||||", fill='black', font=font_small)
-                        draw.text((margin_left + 45, sn_y_pos + 15), serial_number, fill='black', font=font_small)
+                        draw.text((settings['serial_x'] + 45, settings['serial_y']), "|||||||||||||||||||||||||||", fill='black', font=font_small)
+                        draw.text((settings['serial_x'] + 45, settings['serial_y'] + 15), serial_number, fill='black', font=font_small)
                 
                 # Serial number text below barcode
-                draw.text((margin_left + 45, sn_y_pos + 40), serial_number, fill='black', font=font_small)
+                draw.text((settings['serial_x'] + 45, settings['serial_y'] + 40), serial_number, fill='black', font=font_small)
             
             # Get quantity
             qty = None
@@ -450,15 +509,15 @@ class EnhancedBarcodeLabelApp:
             if not qty:
                 qty = "1"  # Default
             
-            # 6. QTY (Quantity) - positioned at bottom
-            draw.text((margin_left, height - 35), f"QTY : {qty}", fill='black', font=font_medium)
+            # 6. QTY (Quantity) - using adjustable position
+            draw.text((settings['qty_x'], settings['qty_y']), f"QTY : {qty}", fill='black', font=font_medium)
         
         else:
-            # Sample data when no lookup performed - following same layout
-            draw.text((margin_left + 70, margin_top + 35), "P/N : Sample Part", fill='black', font=font_bold)
-            draw.text((margin_left, margin_top + 65), "PID : Sample Product", fill='black', font=font_medium)
-            draw.text((margin_left, margin_top + 100), "S/N : Sample Serial", fill='black', font=font_medium)
-            draw.text((margin_left, height - 35), "QTY : 1", fill='black', font=font_medium)
+            # Sample data when no lookup performed - using adjustable positions
+            draw.text((settings['part_x'], settings['part_y']), "P/N : Sample Part", fill='black', font=font_bold)
+            draw.text((settings['pid_x'], settings['pid_y']), "PID : Sample Product", fill='black', font=font_medium)
+            draw.text((settings['serial_x'], settings['serial_y']), "S/N : Sample Serial", fill='black', font=font_medium)
+            draw.text((settings['qty_x'], settings['qty_y']), "QTY : 1", fill='black', font=font_medium)
         
         return img
     
