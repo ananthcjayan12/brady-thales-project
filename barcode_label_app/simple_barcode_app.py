@@ -21,33 +21,34 @@ class EnhancedBarcodeLabelApp:
         self.root.title("Enhanced Barcode Scanner & Label Generator")
         self.root.geometry("1200x800")
         
-        # Excel file path - default
-        self.excel_file = "data/serial_tracker.xlsx"
+        # Excel file path - default (relative to script location)
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        self.excel_file = os.path.join(script_dir, "data", "serial_tracker.xlsx")
         self.df = None
         
         # Current data
         self.current_excel_data = None
         self.current_label = None
         
-        # Label settings - all adjustable
+        # Label settings - 83mm x 32mm label (489px x 189px at 150 DPI)
         self.label_settings = {
-            'width': 400,
-            'height': 200,
-            'company_text': 'CYIENT',
-            'dlm_text': 'DLM',
-            'company_x': 15,
-            'company_y': 15,
-            'dlm_x': 100,
-            'dlm_y': 18,
-            'part_x': 15,
-            'part_y': 50,
-            'pid_x': 15,
-            'pid_y': 80,
-            'serial_x': 15,
-            'serial_y': 115,
-            'qty_x': 15,
-            'qty_y': 165,
-            'qr_size': 80
+            'width': 489,  # 83mm at 150 DPI
+            'height': 189, # 32mm at 150 DPI
+            'logo_path': self.get_default_logo_path(),
+            'logo_x': 15,
+            'logo_y': 5,
+            'logo_width': 150,
+            'logo_height': 40,
+            'pd_x': 190,    # P/D field position
+            'pd_y': 5,
+            'pn_x': 190,    # P/N field position  
+            'pn_y': 45,
+            'pr_x': 190,    # P/R field position
+            'pr_y': 85,
+            'sn_x': 190,    # S/N field position
+            'sn_y': 125,
+            'barcode_width': 280,
+            'barcode_height': 25
         }
         
         # Load Excel file
@@ -61,6 +62,13 @@ class EnhancedBarcodeLabelApp:
         
         # Generate initial preview
         self.update_preview()
+    
+    def get_default_logo_path(self):
+        """Get default logo path relative to script location"""
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        logo_path = os.path.join(script_dir, "logo.png")
+        # Return logo path if exists, otherwise None
+        return logo_path if os.path.exists(logo_path) else None
     
     def load_excel(self):
         """Load Excel file"""
@@ -178,111 +186,111 @@ class EnhancedBarcodeLabelApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar_ctrl.set)
         
-        # Label dimensions
-        dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions", padding="5")
+        # Label dimensions (83mm x 32mm)
+        dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="5")
         dims_frame.pack(fill=tk.X, pady=(0, 5))
         
         ttk.Label(dims_frame, text="Width:").grid(row=0, column=0, sticky=tk.W)
         self.width_var = tk.IntVar(value=self.label_settings['width'])
-        ttk.Scale(dims_frame, from_=200, to=600, variable=self.width_var, 
+        ttk.Scale(dims_frame, from_=300, to=700, variable=self.width_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
         ttk.Label(dims_frame, textvariable=self.width_var).grid(row=0, column=2)
         
         ttk.Label(dims_frame, text="Height:").grid(row=1, column=0, sticky=tk.W)
         self.height_var = tk.IntVar(value=self.label_settings['height'])
-        ttk.Scale(dims_frame, from_=100, to=400, variable=self.height_var, 
+        ttk.Scale(dims_frame, from_=100, to=300, variable=self.height_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
         ttk.Label(dims_frame, textvariable=self.height_var).grid(row=1, column=2)
         
         dims_frame.columnconfigure(1, weight=1)
         
-        # Position controls
+        # Position controls for new label format
         pos_frame = ttk.LabelFrame(scrollable_frame, text="Positions", padding="5")
         pos_frame.pack(fill=tk.X, pady=(0, 5))
         
-        # Company position
-        ttk.Label(pos_frame, text="Company X:").grid(row=0, column=0, sticky=tk.W)
-        self.company_x_var = tk.IntVar(value=self.label_settings['company_x'])
-        ttk.Scale(pos_frame, from_=0, to=200, variable=self.company_x_var, 
+        # Logo position
+        ttk.Label(pos_frame, text="Logo X:").grid(row=0, column=0, sticky=tk.W)
+        self.logo_x_var = tk.IntVar(value=self.label_settings['logo_x'])
+        ttk.Scale(pos_frame, from_=0, to=200, variable=self.logo_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
         
-        ttk.Label(pos_frame, text="Company Y:").grid(row=1, column=0, sticky=tk.W)
-        self.company_y_var = tk.IntVar(value=self.label_settings['company_y'])
-        ttk.Scale(pos_frame, from_=0, to=100, variable=self.company_y_var, 
+        ttk.Label(pos_frame, text="Logo Y:").grid(row=1, column=0, sticky=tk.W)
+        self.logo_y_var = tk.IntVar(value=self.label_settings['logo_y'])
+        ttk.Scale(pos_frame, from_=0, to=100, variable=self.logo_y_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
         
-        # DLM position
-        ttk.Label(pos_frame, text="DLM X:").grid(row=2, column=0, sticky=tk.W)
-        self.dlm_x_var = tk.IntVar(value=self.label_settings['dlm_x'])
-        ttk.Scale(pos_frame, from_=0, to=200, variable=self.dlm_x_var, 
+        # P/D position
+        ttk.Label(pos_frame, text="P/D X:").grid(row=2, column=0, sticky=tk.W)
+        self.pd_x_var = tk.IntVar(value=self.label_settings['pd_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pd_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW)
         
-        ttk.Label(pos_frame, text="DLM Y:").grid(row=3, column=0, sticky=tk.W)
-        self.dlm_y_var = tk.IntVar(value=self.label_settings['dlm_y'])
-        ttk.Scale(pos_frame, from_=0, to=100, variable=self.dlm_y_var, 
+        ttk.Label(pos_frame, text="P/D Y:").grid(row=3, column=0, sticky=tk.W)
+        self.pd_y_var = tk.IntVar(value=self.label_settings['pd_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pd_y_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=3, column=1, sticky=tk.EW)
         
-        # Part number position
-        ttk.Label(pos_frame, text="Part X:").grid(row=4, column=0, sticky=tk.W)
-        self.part_x_var = tk.IntVar(value=self.label_settings['part_x'])
-        ttk.Scale(pos_frame, from_=0, to=300, variable=self.part_x_var, 
+        # P/N position
+        ttk.Label(pos_frame, text="P/N X:").grid(row=4, column=0, sticky=tk.W)
+        self.pn_x_var = tk.IntVar(value=self.label_settings['pn_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pn_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=4, column=1, sticky=tk.EW)
         
-        ttk.Label(pos_frame, text="Part Y:").grid(row=5, column=0, sticky=tk.W)
-        self.part_y_var = tk.IntVar(value=self.label_settings['part_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.part_y_var, 
+        ttk.Label(pos_frame, text="P/N Y:").grid(row=5, column=0, sticky=tk.W)
+        self.pn_y_var = tk.IntVar(value=self.label_settings['pn_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pn_y_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=5, column=1, sticky=tk.EW)
         
-        # PID position
-        ttk.Label(pos_frame, text="PID X:").grid(row=6, column=0, sticky=tk.W)
-        self.pid_x_var = tk.IntVar(value=self.label_settings['pid_x'])
-        ttk.Scale(pos_frame, from_=0, to=300, variable=self.pid_x_var, 
+        # P/R position
+        ttk.Label(pos_frame, text="P/R X:").grid(row=6, column=0, sticky=tk.W)
+        self.pr_x_var = tk.IntVar(value=self.label_settings['pr_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pr_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=6, column=1, sticky=tk.EW)
         
-        ttk.Label(pos_frame, text="PID Y:").grid(row=7, column=0, sticky=tk.W)
-        self.pid_y_var = tk.IntVar(value=self.label_settings['pid_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pid_y_var, 
+        ttk.Label(pos_frame, text="P/R Y:").grid(row=7, column=0, sticky=tk.W)
+        self.pr_y_var = tk.IntVar(value=self.label_settings['pr_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pr_y_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=7, column=1, sticky=tk.EW)
         
-        # Serial position
-        ttk.Label(pos_frame, text="Serial X:").grid(row=8, column=0, sticky=tk.W)
-        self.serial_x_var = tk.IntVar(value=self.label_settings['serial_x'])
-        ttk.Scale(pos_frame, from_=0, to=300, variable=self.serial_x_var, 
+        # S/N position
+        ttk.Label(pos_frame, text="S/N X:").grid(row=8, column=0, sticky=tk.W)
+        self.sn_x_var = tk.IntVar(value=self.label_settings['sn_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.sn_x_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=8, column=1, sticky=tk.EW)
         
-        ttk.Label(pos_frame, text="Serial Y:").grid(row=9, column=0, sticky=tk.W)
-        self.serial_y_var = tk.IntVar(value=self.label_settings['serial_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.serial_y_var, 
+        ttk.Label(pos_frame, text="S/N Y:").grid(row=9, column=0, sticky=tk.W)
+        self.sn_y_var = tk.IntVar(value=self.label_settings['sn_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.sn_y_var, 
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=9, column=1, sticky=tk.EW)
-        
-        # QTY position
-        ttk.Label(pos_frame, text="QTY X:").grid(row=10, column=0, sticky=tk.W)
-        self.qty_x_var = tk.IntVar(value=self.label_settings['qty_x'])
-        ttk.Scale(pos_frame, from_=0, to=300, variable=self.qty_x_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=10, column=1, sticky=tk.EW)
-        
-        ttk.Label(pos_frame, text="QTY Y:").grid(row=11, column=0, sticky=tk.W)
-        self.qty_y_var = tk.IntVar(value=self.label_settings['qty_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.qty_y_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=11, column=1, sticky=tk.EW)
         
         pos_frame.columnconfigure(1, weight=1)
         
-        # Text settings
-        text_frame = ttk.LabelFrame(scrollable_frame, text="Text", padding="5")
-        text_frame.pack(fill=tk.X, pady=(0, 5))
+        # Logo settings
+        logo_frame = ttk.LabelFrame(scrollable_frame, text="Logo", padding="5")
+        logo_frame.pack(fill=tk.X, pady=(0, 5))
         
-        ttk.Label(text_frame, text="Company:").grid(row=0, column=0, sticky=tk.W)
-        self.company_var = tk.StringVar(value=self.label_settings['company_text'])
-        ttk.Entry(text_frame, textvariable=self.company_var).grid(row=0, column=1, sticky=tk.EW)
-        self.company_var.trace_add('write', self.on_text_change)
+        ttk.Label(logo_frame, text="Logo File:").grid(row=0, column=0, sticky=tk.W)
+        self.logo_path_var = tk.StringVar(value=self.label_settings['logo_path'] or "No logo selected")
+        logo_entry = ttk.Entry(logo_frame, textvariable=self.logo_path_var, state='readonly')
+        logo_entry.grid(row=0, column=1, sticky=tk.EW, padx=(5, 0))
         
-        ttk.Label(text_frame, text="Sub text:").grid(row=1, column=0, sticky=tk.W)
-        self.dlm_var = tk.StringVar(value=self.label_settings['dlm_text'])
-        ttk.Entry(text_frame, textvariable=self.dlm_var).grid(row=1, column=1, sticky=tk.EW)
-        self.dlm_var.trace_add('write', self.on_text_change)
+        ttk.Button(logo_frame, text="Browse", command=self.browse_logo).grid(row=0, column=2, padx=(5, 0))
+        ttk.Button(logo_frame, text="Clear", command=self.clear_logo).grid(row=0, column=3, padx=(5, 0))
         
-        text_frame.columnconfigure(1, weight=1)
+        # Logo size controls
+        ttk.Label(logo_frame, text="Logo Width:").grid(row=1, column=0, sticky=tk.W)
+        self.logo_width_var = tk.IntVar(value=self.label_settings['logo_width'])
+        ttk.Scale(logo_frame, from_=50, to=300, variable=self.logo_width_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(logo_frame, textvariable=self.logo_width_var).grid(row=1, column=3)
+        
+        ttk.Label(logo_frame, text="Logo Height:").grid(row=2, column=0, sticky=tk.W)
+        self.logo_height_var = tk.IntVar(value=self.label_settings['logo_height'])
+        ttk.Scale(logo_frame, from_=20, to=100, variable=self.logo_height_var, 
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(logo_frame, textvariable=self.logo_height_var).grid(row=2, column=3)
+        
+        logo_frame.columnconfigure(1, weight=1)
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar_ctrl.pack(side="right", fill="y")
@@ -309,31 +317,49 @@ class EnhancedBarcodeLabelApp:
         self.update_label_settings()
         self.update_preview()
     
-    def on_text_change(self, *args):
-        """Called when text settings change"""
-        self.update_label_settings()
-        self.update_preview()
+
     
     def update_label_settings(self):
         """Update internal label settings from UI"""
         self.label_settings.update({
             'width': self.width_var.get(),
             'height': self.height_var.get(),
-            'company_text': self.company_var.get(),
-            'dlm_text': self.dlm_var.get(),
-            'company_x': self.company_x_var.get(),
-            'company_y': self.company_y_var.get(),
-            'dlm_x': self.dlm_x_var.get(),
-            'dlm_y': self.dlm_y_var.get(),
-            'part_x': self.part_x_var.get(),
-            'part_y': self.part_y_var.get(),
-            'pid_x': self.pid_x_var.get(),
-            'pid_y': self.pid_y_var.get(),
-            'serial_x': self.serial_x_var.get(),
-            'serial_y': self.serial_y_var.get(),
-            'qty_x': self.qty_x_var.get(),
-            'qty_y': self.qty_y_var.get()
+            'logo_path': self.logo_path_var.get() if self.logo_path_var.get() != "No logo selected" else None,
+            'logo_x': self.logo_x_var.get(),
+            'logo_y': self.logo_y_var.get(),
+            'logo_width': self.logo_width_var.get(),
+            'logo_height': self.logo_height_var.get(),
+            'pd_x': self.pd_x_var.get(),
+            'pd_y': self.pd_y_var.get(),
+            'pn_x': self.pn_x_var.get(),
+            'pn_y': self.pn_y_var.get(),
+            'pr_x': self.pr_x_var.get(),
+            'pr_y': self.pr_y_var.get(),
+            'sn_x': self.sn_x_var.get(),
+            'sn_y': self.sn_y_var.get()
         })
+    
+    def browse_logo(self):
+        """Browse for logo image file"""
+        filename = filedialog.askopenfilename(
+            title="Select Logo Image",
+            filetypes=[
+                ("Image files", "*.png *.jpg *.jpeg *.gif *.bmp"),
+                ("PNG files", "*.png"),
+                ("JPEG files", "*.jpg *.jpeg"),
+                ("All files", "*.*")
+            ]
+        )
+        if filename:
+            self.logo_path_var.set(filename)
+            self.label_settings['logo_path'] = filename
+            self.update_preview()
+    
+    def clear_logo(self):
+        """Clear the selected logo"""
+        self.logo_path_var.set("No logo selected")
+        self.label_settings['logo_path'] = None
+        self.update_preview()
     
     def browse_excel(self):
         """Browse for Excel file"""
@@ -399,8 +425,80 @@ class EnhancedBarcodeLabelApp:
         self.status_var.set(f"Found {len(found_rows)} match(es) - Preview updated")
         self.update_preview()
     
+    def generate_barcode(self, data, width=280, height=25):
+        """Generate a clean Code128 barcode using treepoem (no text)"""
+        try:
+            import treepoem
+            
+            # Generate Code128 barcode with treepoem (much cleaner!)
+            barcode_img = treepoem.generate_barcode(
+                barcode_type='code128',
+                data=data,
+                options={
+                    'includetext': False,  # No text in barcode
+                    'textsize': 0,         # No text size
+                    'height': 0.5,         # Bar height ratio
+                    'width': 0.02          # Bar width
+                }
+            )
+            
+            # Convert to RGB if needed
+            if barcode_img.mode != 'RGB':
+                barcode_img = barcode_img.convert('RGB')
+            
+            # Resize to exact dimensions
+            barcode_final = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
+            
+            return barcode_final
+            
+        except ImportError:
+            print("treepoem not installed, using fallback barcode generation")
+            return self.generate_simple_barcode(data, width, height)
+        except Exception as e:
+            print(f"Error with treepoem: {e}, using fallback")
+            return self.generate_simple_barcode(data, width, height)
+    
+    def generate_simple_barcode(self, data, width=280, height=25):
+        """Fallback: Generate a simple barcode pattern"""
+        img = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(img)
+        
+        # Create Code128-like pattern manually
+        # This is a simplified pattern generator
+        import hashlib
+        
+        # Use hash to create consistent pattern
+        hash_val = hashlib.md5(data.encode()).hexdigest()
+        
+        # Convert to pattern
+        bar_width = 2
+        x = 5  # Start with small margin
+        
+        # Generate bars based on data
+        for i in range(0, len(hash_val), 2):
+            try:
+                hex_val = int(hash_val[i:i+2], 16)
+                
+                # Create pattern: each hex pair creates different bar patterns
+                for bit in range(4):
+                    if hex_val & (1 << bit):
+                        # Draw black bar
+                        draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
+                    x += bar_width
+                    
+                    if x >= width - 10:  # Leave margin at end
+                        break
+                
+                if x >= width - 10:
+                    break
+                    
+            except (ValueError, IndexError):
+                continue
+        
+        return img
+    
     def generate_label_image(self):
-        """Generate label image matching the reference layout exactly"""
+        """Generate 83mm x 32mm label with P/D, P/N, P/R, S/N fields"""
         settings = self.label_settings
         width = settings['width']
         height = settings['height']
@@ -411,115 +509,132 @@ class EnhancedBarcodeLabelApp:
         
         # Load fonts
         try:
-            font_large = ImageFont.truetype("arial.ttf", 18)  # For CYIENT
-            font_medium = ImageFont.truetype("arial.ttf", 14)  # For P/N, PID, etc.
-            font_small = ImageFont.truetype("arial.ttf", 12)   # For DLM and other text
-            font_bold = ImageFont.truetype("arialbd.ttf", 14)  # For bold text
+            font_company = ImageFont.truetype("arial.ttf", 14)  # For CYIENT
+            font_label = ImageFont.truetype("arial.ttf", 10)    # For P/D, P/N, etc labels
+            font_data = ImageFont.truetype("arial.ttf", 9)      # For data text
+            font_dlm = ImageFont.truetype("arial.ttf", 8)       # For DLM
         except:
-            font_large = ImageFont.load_default()
-            font_medium = font_large
-            font_small = font_large
-            font_bold = font_large
+            font_company = ImageFont.load_default()
+            font_label = font_company
+            font_data = font_company
+            font_dlm = font_company
         
         # Draw border
-        draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
+        draw.rectangle([0, 0, width-1, height-1], outline='black', width=1)
         
-        # 1. CYIENT logo/text - using adjustable position
-        draw.text((settings['company_x'], settings['company_y']), settings['company_text'], fill='black', font=font_large)
-        
-        # 2. DLM subtitle - using adjustable position
-        draw.text((settings['dlm_x'], settings['dlm_y']), settings['dlm_text'], fill='black', font=font_small)
+        # 1. Add logo if available
+        if settings['logo_path'] and os.path.exists(settings['logo_path']):
+            try:
+                logo_img = Image.open(settings['logo_path'])
+                
+                # Convert to RGB if needed
+                if logo_img.mode != 'RGB':
+                    logo_img = logo_img.convert('RGB')
+                
+                # Resize logo to specified dimensions
+                logo_resized = logo_img.resize((settings['logo_width'], settings['logo_height']), Image.Resampling.LANCZOS)
+                
+                # Paste logo on the label
+                img.paste(logo_resized, (settings['logo_x'], settings['logo_y']))
+                
+            except Exception as e:
+                print(f"Error loading logo: {e}")
+                # Fallback to text if logo fails
+                draw.text((settings['logo_x'], settings['logo_y']), "CYIENT DLM", fill='black', font=font_company)
+        else:
+            # No logo - draw fallback text
+            draw.text((settings['logo_x'], settings['logo_y']), "CYIENT DLM", fill='black', font=font_company)
         
         if self.current_excel_data:
-            # Get part number
-            part_number = None
-            for key, value in self.current_excel_data.items():
-                if 'CPN' in key.upper() or 'PART' in key.upper() or 'P/N' in key.upper():
-                    part_number = str(value)
-                    break
+            # Get field data from Excel
+            pd_data = self.get_field_data(['P/D', 'PD', 'DESCRIPTION', 'DESC', 'PRODUCT'])
+            pn_data = self.get_field_data(['P/N', 'PN', 'PART', 'CPN', 'PART_NUMBER'])
+            pr_data = self.get_field_data(['P/R', 'PR', 'REVISION', 'REV', 'VERSION'])
             
-            # 3. P/N (Part Number) - using adjustable position
-            if part_number:
-                part_text = f"P/N : {part_number}"
-                draw.text((settings['part_x'], settings['part_y']), part_text, fill='black', font=font_bold)
+            # S/N should be the lookup input value (the barcode that was scanned/entered)
+            sn_data = self.barcode_var.get().strip() if hasattr(self, 'barcode_var') and self.barcode_var.get().strip() else "CDL2349-1195"
             
-            # Get product description
-            product_desc = None
-            for key, value in self.current_excel_data.items():
-                if 'DESC' in key.upper() or 'PRODUCT' in key.upper() or 'PID' in key.upper():
-                    product_desc = str(value)
-                    break
+            # Default values if not found
+            if not pd_data: pd_data = "SCB CCA"
+            if not pn_data: pn_data = "CZ5S1000B"
+            if not pr_data: pr_data = "02"
             
-            # 4. PID (Product ID) - using adjustable position
-            if product_desc:
-                pid_text = f"PID : {product_desc[:30]}"
-                draw.text((settings['pid_x'], settings['pid_y']), pid_text, fill='black', font=font_medium)
+            # 3. P/D field
+            draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+            pd_barcode = self.generate_barcode(pd_data, settings['barcode_width'], settings['barcode_height'])
+            if pd_barcode:
+                img.paste(pd_barcode, (settings['pd_x'] + 30, settings['pd_y'] + 2))
+            else:
+                draw.text((settings['pd_x'] + 30, settings['pd_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+            draw.text((settings['pd_x'] + 30, settings['pd_y'] + 28), pd_data, fill='black', font=font_data)
             
-            # Get serial number
-            serial_number = None
-            for key, value in self.current_excel_data.items():
-                if 'SERIAL' in key.upper() or 'S/N' in key.upper() or 'SL.' in key.upper():
-                    serial_number = str(value)
-                    break
+            # 4. P/N field
+            draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+            pn_barcode = self.generate_barcode(pn_data, settings['barcode_width'], settings['barcode_height'])
+            if pn_barcode:
+                img.paste(pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
+            else:
+                draw.text((settings['pn_x'] + 30, settings['pn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+            draw.text((settings['pn_x'] + 30, settings['pn_y'] + 28), pn_data, fill='black', font=font_data)
             
-            # 5. S/N (Serial Number) with barcode - using adjustable position
-            if serial_number:
-                draw.text((settings['serial_x'], settings['serial_y']), "S/N :", fill='black', font=font_medium)
-                
-                # Create linear barcode for serial number using python-barcode
-                try:
-                    from barcode import Code128
-                    from barcode.writer import ImageWriter
-                    from io import BytesIO
-                    
-                    # Generate Code128 barcode
-                    code = Code128(serial_number, writer=ImageWriter())
-                    barcode_buffer = BytesIO()
-                    code.write(barcode_buffer)
-                    barcode_buffer.seek(0)
-                    
-                    # Load and resize barcode
-                    barcode_img = Image.open(barcode_buffer)
-                    # Resize to fit the label better
-                    barcode_img = barcode_img.resize((200, 35))
-                    img.paste(barcode_img, (settings['serial_x'] + 45, settings['serial_y'] - 5))
-                    
-                except ImportError:
-                    # Try alternative barcode library
-                    try:
-                        import code128
-                        barcode_img = code128.image(serial_number, height=25)
-                        barcode_img = barcode_img.resize((200, 25))
-                        img.paste(barcode_img, (settings['serial_x'] + 45, settings['serial_y']))
-                    except:
-                        # Fallback - draw barcode-like pattern
-                        draw.text((settings['serial_x'] + 45, settings['serial_y']), "|||||||||||||||||||||||||||", fill='black', font=font_small)
-                        draw.text((settings['serial_x'] + 45, settings['serial_y'] + 15), serial_number, fill='black', font=font_small)
-                
-                # Serial number text below barcode
-                draw.text((settings['serial_x'] + 45, settings['serial_y'] + 40), serial_number, fill='black', font=font_small)
+            # 5. P/R field
+            draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
+            pr_barcode = self.generate_barcode(pr_data, settings['barcode_width'], settings['barcode_height'])
+            if pr_barcode:
+                img.paste(pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
+            else:
+                draw.text((settings['pr_x'] + 30, settings['pr_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+            draw.text((settings['pr_x'] + 30, settings['pr_y'] + 28), pr_data, fill='black', font=font_data)
             
-            # Get quantity
-            qty = None
-            for key, value in self.current_excel_data.items():
-                if 'QTY' in key.upper() or 'QUANTITY' in key.upper() or 'SIZE' in key.upper():
-                    qty = str(value)
-                    break
-            
-            if not qty:
-                qty = "1"  # Default
-            
-            # 6. QTY (Quantity) - using adjustable position
-            draw.text((settings['qty_x'], settings['qty_y']), f"QTY : {qty}", fill='black', font=font_medium)
+            # 6. S/N field
+            draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+            sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
+            if sn_barcode:
+                img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
+            else:
+                draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+            draw.text((settings['sn_x'] + 30, settings['sn_y'] + 28), sn_data, fill='black', font=font_data)
         
         else:
-            # Sample data when no lookup performed - using adjustable positions
-            draw.text((settings['part_x'], settings['part_y']), "P/N : Sample Part", fill='black', font=font_bold)
-            draw.text((settings['pid_x'], settings['pid_y']), "PID : Sample Product", fill='black', font=font_medium)
-            draw.text((settings['serial_x'], settings['serial_y']), "S/N : Sample Serial", fill='black', font=font_medium)
-            draw.text((settings['qty_x'], settings['qty_y']), "QTY : 1", fill='black', font=font_medium)
+            # Sample data when no lookup performed
+            # Also generate sample barcodes for preview
+            sample_pd_barcode = self.generate_simple_barcode("SCB CCA", settings['barcode_width'], settings['barcode_height'])
+            sample_pn_barcode = self.generate_simple_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
+            sample_pr_barcode = self.generate_simple_barcode("02", settings['barcode_width'], settings['barcode_height'])
+            sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
+            
+            # P/D
+            draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+            img.paste(sample_pd_barcode, (settings['pd_x'] + 30, settings['pd_y'] + 2))
+            draw.text((settings['pd_x'] + 30, settings['pd_y'] + 28), "SCB CCA", fill='black', font=font_data)
+            
+            # P/N
+            draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+            img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
+            draw.text((settings['pn_x'] + 30, settings['pn_y'] + 28), "CZ5S1000B", fill='black', font=font_data)
+            
+            # P/R
+            draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
+            img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
+            draw.text((settings['pr_x'] + 30, settings['pr_y'] + 28), "02", fill='black', font=font_data)
+            
+            # S/N
+            draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+            img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
+            draw.text((settings['sn_x'] + 30, settings['sn_y'] + 28), "CDL2349-1195", fill='black', font=font_data)
         
         return img
+    
+    def get_field_data(self, field_names):
+        """Get data for a field from Excel using multiple possible column names"""
+        if not self.current_excel_data:
+            return None
+            
+        for field_name in field_names:
+            for key, value in self.current_excel_data.items():
+                if field_name.upper() in key.upper():
+                    return str(value)
+        return None
     
     def update_preview(self):
         """Update the label preview"""
