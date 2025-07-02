@@ -43,15 +43,26 @@ jobs:
         copy dist\BarcodeGenerator.exe BarcodeGenerator_Distribution\
         copy logo.png BarcodeGenerator_Distribution\
         xcopy /E /I data BarcodeGenerator_Distribution\data
-        echo # Barcode Label Generator > BarcodeGenerator_Distribution\README.txt
-        echo. >> BarcodeGenerator_Distribution\README.txt
-        echo ## Quick Start >> BarcodeGenerator_Distribution\README.txt
-        echo 1. Double-click BarcodeGenerator.exe to start >> BarcodeGenerator_Distribution\README.txt
-        echo 2. Select your Excel file or use the default one >> BarcodeGenerator_Distribution\README.txt
-        echo 3. Browse to change the logo if needed >> BarcodeGenerator_Distribution\README.txt
-        echo 4. Enter a serial number to lookup and generate labels >> BarcodeGenerator_Distribution\README.txt
-        echo. >> BarcodeGenerator_Distribution\README.txt
-        echo No Python installation required! >> BarcodeGenerator_Distribution\README.txt
+      shell: cmd
+    
+    - name: Create README file
+      run: |
+        cd barcode_label_app
+        $readme = @"
+        # Barcode Label Generator
+        
+        ## Quick Start
+        1. Double-click BarcodeGenerator.exe to start
+        2. Select your Excel file or use the default one
+        3. Browse to change the logo if needed  
+        4. Enter a serial number to lookup and generate labels
+        
+        No Python installation required!
+        
+        Generated with PyInstaller on $(Get-Date)
+        "@
+        $readme | Out-File -FilePath "BarcodeGenerator_Distribution\README.txt" -Encoding UTF8
+      shell: powershell
     
     - name: Upload complete distribution
       uses: actions/upload-artifact@v4
@@ -70,8 +81,9 @@ jobs:
     - name: Show build info
       run: |
         cd barcode_label_app
-        echo "Build completed successfully!"
-        echo "Executable size:"
-        dir dist\BarcodeGenerator.exe
-        echo "Distribution contents:"
-        dir BarcodeGenerator_Distribution
+        Write-Host "Build completed successfully!"
+        Write-Host "Executable size:"
+        Get-ChildItem dist\BarcodeGenerator.exe | Format-Table Name, Length
+        Write-Host "Distribution contents:"
+        Get-ChildItem BarcodeGenerator_Distribution | Format-Table Name, Length
+      shell: powershell
