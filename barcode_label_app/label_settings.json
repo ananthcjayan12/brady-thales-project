@@ -1,0 +1,19 @@
+{
+  "width": 489,
+  "height": 208,
+  "logo_path": "/Users/ananthu/Desktop/new_repos/brady-thales-project/barcode_label_app/logo.png",
+  "logo_x": 15,
+  "logo_y": 5,
+  "logo_width": 157,
+  "logo_height": 40,
+  "pd_x": 190,
+  "pd_y": 5,
+  "pn_x": 191,
+  "pn_y": 45,
+  "pr_x": 190,
+  "pr_y": 85,
+  "sn_x": 190,
+  "sn_y": 125,
+  "barcode_width": 280,
+  "barcode_height": 25
+}

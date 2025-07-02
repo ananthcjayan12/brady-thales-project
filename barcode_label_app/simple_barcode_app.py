@@ -13,25 +13,33 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
 import qrcode
 import os
+import json
 from datetime import datetime
 
 class EnhancedBarcodeLabelApp:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Enhanced Barcode Scanner & Label Generator")
-        self.root.geometry("1200x800")
+        self.root.geometry("1100x700")
+        self.root.minsize(900, 600)  # Set minimum size
         
         # Excel file path - default (relative to script location)
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.excel_file = os.path.join(script_dir, "data", "serial_tracker.xlsx")
         self.df = None
         
+        # Settings file path
+        self.settings_file = os.path.join(script_dir, "label_settings.json")
+        
         # Current data
         self.current_excel_data = None
         self.current_label = None
         
-        # Label settings - 83mm x 32mm label (489px x 189px at 150 DPI)
-        self.label_settings = {
+        # UI variables (will be initialized in setup_ui)
+        self.settings_status_var = None
+        
+        # Default label settings - 83mm x 32mm label (489px x 189px at 150 DPI)
+        self.default_settings = {
             'width': 489,  # 83mm at 150 DPI
             'height': 189, # 32mm at 150 DPI
             'logo_path': self.get_default_logo_path(),
@@ -51,6 +59,9 @@ class EnhancedBarcodeLabelApp:
             'barcode_height': 25
         }
         
+        # Load settings from file or use defaults
+        self.label_settings = self.load_settings()
+        
         # Load Excel file
         self.load_excel()
         
@@ -59,6 +70,9 @@ class EnhancedBarcodeLabelApp:
         
         # Create output directory
         os.makedirs("output_labels", exist_ok=True)
+        
+        # Update UI from loaded settings
+        self.update_ui_from_settings()
         
         # Generate initial preview
         self.update_preview()
@@ -69,6 +83,100 @@ class EnhancedBarcodeLabelApp:
         logo_path = os.path.join(script_dir, "logo.png")
         # Return logo path if exists, otherwise None
         return logo_path if os.path.exists(logo_path) else None
+    
+    def save_settings(self):
+        """Save current label settings to JSON file"""
+        try:
+            # Update settings from UI
+            self.update_label_settings()
+            
+            # Save to file
+            with open(self.settings_file, 'w') as f:
+                json.dump(self.label_settings, f, indent=2)
+            
+            messagebox.showinfo("Settings Saved", f"Label settings saved to:\n{os.path.basename(self.settings_file)}")
+            self.status_var.set("Settings saved successfully")
+            if hasattr(self, 'settings_status_var') and self.settings_status_var:
+                self.settings_status_var.set("✓ Settings saved to file")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save settings: {e}")
+    
+    def load_settings(self):
+        """Load label settings from JSON file or return defaults"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r') as f:
+                    saved_settings = json.load(f)
+                
+                # Merge with defaults to ensure all keys exist
+                settings = self.default_settings.copy()
+                settings.update(saved_settings)
+                
+                print(f"Loaded settings from {self.settings_file}")
+                return settings
+            else:
+                print("No saved settings found, using defaults")
+                return self.default_settings.copy()
+                
+        except Exception as e:
+            print(f"Error loading settings: {e}, using defaults")
+            return self.default_settings.copy()
+    
+    def load_and_apply_settings(self):
+        """Load settings from file and apply to UI"""
+        try:
+            if os.path.exists(self.settings_file):
+                self.label_settings = self.load_settings()
+                self.update_ui_from_settings()
+                self.update_preview()
+                messagebox.showinfo("Settings Loaded", "Settings loaded successfully!")
+                self.status_var.set("Settings loaded from file")
+                if hasattr(self, 'settings_status_var') and self.settings_status_var:
+                    self.settings_status_var.set("✓ Settings loaded from saved file")
+            else:
+                messagebox.showinfo("No Settings File", "No saved settings file found. Using current settings.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load settings: {e}")
+    
+    def reset_settings(self):
+        """Reset settings to defaults"""
+        if messagebox.askyesno("Reset Settings", "Reset all label settings to default values?"):
+            self.label_settings = self.default_settings.copy()
+            self.update_ui_from_settings()
+            self.update_preview()
+            self.status_var.set("Settings reset to defaults")
+            if hasattr(self, 'settings_status_var') and self.settings_status_var:
+                self.settings_status_var.set("Using default settings")
+    
+    def update_ui_from_settings(self):
+        """Update UI controls to match current settings"""
+        try:
+            # Update all the variable controls
+            self.width_var.set(self.label_settings['width'])
+            self.height_var.set(self.label_settings['height'])
+            self.logo_x_var.set(self.label_settings['logo_x'])
+            self.logo_y_var.set(self.label_settings['logo_y'])
+            self.logo_width_var.set(self.label_settings['logo_width'])
+            self.logo_height_var.set(self.label_settings['logo_height'])
+            self.pd_x_var.set(self.label_settings['pd_x'])
+            self.pd_y_var.set(self.label_settings['pd_y'])
+            self.pn_x_var.set(self.label_settings['pn_x'])
+            self.pn_y_var.set(self.label_settings['pn_y'])
+            self.pr_x_var.set(self.label_settings['pr_x'])
+            self.pr_y_var.set(self.label_settings['pr_y'])
+            self.sn_x_var.set(self.label_settings['sn_x'])
+            self.sn_y_var.set(self.label_settings['sn_y'])
+            
+            # Update logo path
+            logo_path = self.label_settings.get('logo_path')
+            if logo_path and os.path.exists(logo_path):
+                self.logo_path_var.set(logo_path)
+            else:
+                self.logo_path_var.set("No logo selected")
+                
+        except Exception as e:
+            print(f"Error updating UI from settings: {e}")
     
     def load_excel(self):
         """Load Excel file"""
@@ -82,27 +190,27 @@ class EnhancedBarcodeLabelApp:
     
     def setup_ui(self):
         """Setup enhanced UI with preview and controls"""
-        # Create main paned window
+        # Create main paned window - better for smaller screens
         main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_paned.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Left panel - Controls
-        left_frame = ttk.Frame(main_paned, padding="10")
-        main_paned.add(left_frame, weight=1)
+        # Left panel - Controls (slightly larger weight for controls)
+        left_frame = ttk.Frame(main_paned, padding="5")
+        main_paned.add(left_frame, weight=3)
         
         # Right panel - Preview
-        right_frame = ttk.Frame(main_paned, padding="10")
-        main_paned.add(right_frame, weight=1)
+        right_frame = ttk.Frame(main_paned, padding="5")
+        main_paned.add(right_frame, weight=2)
         
         self.setup_left_panel(left_frame)
         self.setup_right_panel(right_frame)
     
     def setup_left_panel(self, parent):
         """Setup left control panel"""
-        # Title
+        # Title - smaller for compact layout
         title = ttk.Label(parent, text="Barcode Scanner & Label Generator", 
-                         font=('Arial', 16, 'bold'))
-        title.pack(pady=(0, 20))
+                         font=('Arial', 14, 'bold'))
+        title.pack(pady=(0, 10))
         
         # Excel file selection
         excel_frame = ttk.LabelFrame(parent, text="Excel File", padding="10")
@@ -140,11 +248,15 @@ class EnhancedBarcodeLabelApp:
         # Bind Enter key
         self.barcode_entry.bind('<Return>', lambda e: self.lookup_data())
         
+        # Bind keyboard shortcuts
+        self.root.bind('<Control-s>', lambda e: self.save_settings())
+        self.root.bind('<Control-S>', lambda e: self.save_settings())
+        
         # Results section
         results_frame = ttk.LabelFrame(parent, text="Found Data", padding="10")
         results_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
-        self.results_text = tk.Text(results_frame, height=8, font=('Courier', 9))
+        self.results_text = tk.Text(results_frame, height=6, font=('Courier', 9))
         scrollbar = ttk.Scrollbar(results_frame, orient=tk.VERTICAL, command=self.results_text.yview)
         self.results_text.configure(yscrollcommand=scrollbar.set)
         
@@ -173,8 +285,8 @@ class EnhancedBarcodeLabelApp:
     
     def setup_label_controls(self, parent):
         """Setup label adjustment controls"""
-        # Create a scrollable frame for controls
-        canvas = tk.Canvas(parent, height=200)
+        # Create a scrollable frame for controls - reduced height for smaller screens
+        canvas = tk.Canvas(parent, height=150)
         scrollbar_ctrl = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
         scrollable_frame = ttk.Frame(canvas)
         
@@ -186,9 +298,34 @@ class EnhancedBarcodeLabelApp:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar_ctrl.set)
         
-        # Label dimensions (83mm x 32mm)
-        dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="5")
-        dims_frame.pack(fill=tk.X, pady=(0, 5))
+        # Add mouse wheel scrolling - cross-platform
+        def _on_mousewheel(event):
+            # Different platforms use different delta values
+            if event.delta:
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            else:
+                # For Linux/Unix systems
+                if event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    canvas.yview_scroll(1, "units")
+        
+        def _bind_to_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            canvas.bind_all("<Button-4>", _on_mousewheel)  # Linux
+            canvas.bind_all("<Button-5>", _on_mousewheel)  # Linux
+            
+        def _unbind_from_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+            
+        canvas.bind('<Enter>', _bind_to_mousewheel)
+        canvas.bind('<Leave>', _unbind_from_mousewheel)
+        
+        # Label dimensions (83mm x 32mm) - more compact
+        dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="3")
+        dims_frame.pack(fill=tk.X, pady=(0, 3))
         
         ttk.Label(dims_frame, text="Width:").grid(row=0, column=0, sticky=tk.W)
         self.width_var = tk.IntVar(value=self.label_settings['width'])
@@ -204,9 +341,9 @@ class EnhancedBarcodeLabelApp:
         
         dims_frame.columnconfigure(1, weight=1)
         
-        # Position controls for new label format
-        pos_frame = ttk.LabelFrame(scrollable_frame, text="Positions", padding="5")
-        pos_frame.pack(fill=tk.X, pady=(0, 5))
+        # Position controls for new label format - more compact
+        pos_frame = ttk.LabelFrame(scrollable_frame, text="Positions", padding="3")
+        pos_frame.pack(fill=tk.X, pady=(0, 3))
         
         # Logo position
         ttk.Label(pos_frame, text="Logo X:").grid(row=0, column=0, sticky=tk.W)
@@ -265,9 +402,9 @@ class EnhancedBarcodeLabelApp:
         
         pos_frame.columnconfigure(1, weight=1)
         
-        # Logo settings
-        logo_frame = ttk.LabelFrame(scrollable_frame, text="Logo", padding="5")
-        logo_frame.pack(fill=tk.X, pady=(0, 5))
+        # Logo settings - more compact
+        logo_frame = ttk.LabelFrame(scrollable_frame, text="Logo", padding="3")
+        logo_frame.pack(fill=tk.X, pady=(0, 3))
         
         ttk.Label(logo_frame, text="Logo File:").grid(row=0, column=0, sticky=tk.W)
         self.logo_path_var = tk.StringVar(value=self.label_settings['logo_path'] or "No logo selected")
@@ -294,6 +431,30 @@ class EnhancedBarcodeLabelApp:
         
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar_ctrl.pack(side="right", fill="y")
+        
+        # Settings management buttons - moved outside scrollable area for better access
+        settings_mgmt_frame = ttk.LabelFrame(parent, text="Settings Management", padding="5")
+        settings_mgmt_frame.pack(fill=tk.X, pady=(5, 0))
+        
+        # First row of buttons
+        settings_btn_frame1 = ttk.Frame(settings_mgmt_frame)
+        settings_btn_frame1.pack(fill=tk.X, pady=(0, 2))
+        
+        ttk.Button(settings_btn_frame1, text="Save (Ctrl+S)", command=self.save_settings, width=12).pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Button(settings_btn_frame1, text="Load", command=self.load_and_apply_settings, width=10).pack(side=tk.LEFT, padx=(0, 2))
+        ttk.Button(settings_btn_frame1, text="Reset", command=self.reset_settings, width=10).pack(side=tk.LEFT)
+        
+        # Settings status on second row
+        self.settings_status_var = tk.StringVar()
+        settings_status_label = ttk.Label(settings_mgmt_frame, textvariable=self.settings_status_var, 
+                                        font=('Arial', 8), foreground='blue')
+        settings_status_label.pack(pady=(2, 0))
+        
+        # Set initial settings status
+        if os.path.exists(self.settings_file):
+            self.settings_status_var.set("✓ Settings loaded from saved file")
+        else:
+            self.settings_status_var.set("Using default settings")
     
     def setup_right_panel(self, parent):
         """Setup right preview panel"""
@@ -301,9 +462,9 @@ class EnhancedBarcodeLabelApp:
         preview_frame = ttk.LabelFrame(parent, text="Label Preview", padding="10")
         preview_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Canvas for preview
-        self.preview_canvas = tk.Canvas(preview_frame, bg='white', width=450, height=250)
-        self.preview_canvas.pack(expand=True)
+        # Canvas for preview - more responsive
+        self.preview_canvas = tk.Canvas(preview_frame, bg='white', width=400, height=220)
+        self.preview_canvas.pack(expand=True, fill=tk.BOTH)
         
         # Preview info
         info_frame = ttk.Frame(preview_frame)
