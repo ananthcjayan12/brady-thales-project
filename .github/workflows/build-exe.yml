@@ -21,7 +21,7 @@ jobs:
       uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
@@ -54,16 +54,16 @@ jobs:
         echo No Python installation required! >> BarcodeGenerator_Distribution\README.txt
     
     - name: Upload complete distribution
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: BarcodeGenerator-Windows-Complete
         path: barcode_label_app/BarcodeGenerator_Distribution/
         retention-days: 30
     
     - name: Upload executable only
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: BarcodeGenerator.exe
+        name: BarcodeGenerator-exe
         path: barcode_label_app/dist/BarcodeGenerator.exe
         retention-days: 30
     
