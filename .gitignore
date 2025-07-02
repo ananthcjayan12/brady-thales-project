@@ -179,3 +179,47 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+# Project-specific ignores
+# ======================
+
+# Generated label files
+output_labels/
+barcode_label_app/output_labels/
+
+# macOS system files
+.DS_Store
+**/.DS_Store
+
+# Excel temporary files
+~$*.xlsx
+~$*.xls
+
+# PyInstaller build artifacts
+barcode_label_app/build/
+barcode_label_app/dist/
+barcode_label_app/*.spec
+barcode_label_app/BarcodeGenerator_Distribution/
+
+# Application-specific temp files
+*.tmp
+*.log
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Test and debug files
+debug_*.png
+test_*.png
+temp_*.png
+
+# Virtual environment (if created inside project)
+env/
+venv/
+
+# Local configuration files (if any)
+config.local.py
+.env.local

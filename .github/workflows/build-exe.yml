@@ -1,0 +1,77 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'barcode_label_app/**'
+      - '.github/workflows/build-exe.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'barcode_label_app/**'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        cd barcode_label_app
+        pip install -r requirements.txt
+    
+    - name: Build executable
+      run: |
+        cd barcode_label_app
+        pyinstaller --onefile --windowed --name=BarcodeGenerator --add-data="logo.png;." --add-data="data;data" --collect-all=treepoem --collect-all=PIL --hidden-import=tkinter --hidden-import=tkinter.ttk --hidden-import=tkinter.filedialog --hidden-import=tkinter.messagebox simple_barcode_app.py
+    
+    - name: Create distribution package
+      run: |
+        cd barcode_label_app
+        mkdir BarcodeGenerator_Distribution
+        copy dist\BarcodeGenerator.exe BarcodeGenerator_Distribution\
+        copy logo.png BarcodeGenerator_Distribution\
+        xcopy /E /I data BarcodeGenerator_Distribution\data
+        echo # Barcode Label Generator > BarcodeGenerator_Distribution\README.txt
+        echo. >> BarcodeGenerator_Distribution\README.txt
+        echo ## Quick Start >> BarcodeGenerator_Distribution\README.txt
+        echo 1. Double-click BarcodeGenerator.exe to start >> BarcodeGenerator_Distribution\README.txt
+        echo 2. Select your Excel file or use the default one >> BarcodeGenerator_Distribution\README.txt
+        echo 3. Browse to change the logo if needed >> BarcodeGenerator_Distribution\README.txt
+        echo 4. Enter a serial number to lookup and generate labels >> BarcodeGenerator_Distribution\README.txt
+        echo. >> BarcodeGenerator_Distribution\README.txt
+        echo No Python installation required! >> BarcodeGenerator_Distribution\README.txt
+    
+    - name: Upload complete distribution
+      uses: actions/upload-artifact@v3
+      with:
+        name: BarcodeGenerator-Windows-Complete
+        path: barcode_label_app/BarcodeGenerator_Distribution/
+        retention-days: 30
+    
+    - name: Upload executable only
+      uses: actions/upload-artifact@v3
+      with:
+        name: BarcodeGenerator.exe
+        path: barcode_label_app/dist/BarcodeGenerator.exe
+        retention-days: 30
+    
+    - name: Show build info
+      run: |
+        cd barcode_label_app
+        echo "Build completed successfully!"
+        echo "Executable size:"
+        dir dist\BarcodeGenerator.exe
+        echo "Distribution contents:"
+        dir BarcodeGenerator_Distribution
