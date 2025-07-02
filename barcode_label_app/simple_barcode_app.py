@@ -122,7 +122,7 @@ class EnhancedBarcodeLabelApp:
         input_frame = ttk.LabelFrame(parent, text="Barcode Input", padding="10")
         input_frame.pack(fill=tk.X, pady=(0, 10))
         
-        ttk.Label(input_frame, text="Scan or type part number:").pack(anchor=tk.W)
+        ttk.Label(input_frame, text="Scan or type serial number:").pack(anchor=tk.W)
         
         self.barcode_var = tk.StringVar()
         self.barcode_entry = ttk.Entry(input_frame, textvariable=self.barcode_var, font=('Arial', 12))
@@ -167,7 +167,7 @@ class EnhancedBarcodeLabelApp:
         
         # Status bar
         self.status_var = tk.StringVar()
-        self.status_var.set("Ready - Select Excel file and enter part number")
+        self.status_var.set("Ready - Select Excel file and enter serial number for range lookup")
         status_bar = ttk.Label(parent, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(fill=tk.X, pady=(10, 0))
     
@@ -380,49 +380,89 @@ class EnhancedBarcodeLabelApp:
             self.status_var.set("Failed to load Excel file")
     
     def lookup_data(self):
-        """Simple lookup - search in any column for the input"""
+        """Range-based lookup - check if serial number is between SL.From and SL.End"""
         if self.df is None:
             messagebox.showerror("Error", "Excel file not loaded!")
             return
         
-        search_term = self.barcode_var.get().strip()
-        if not search_term:
-            messagebox.showwarning("Warning", "Please enter something to search for!")
+        serial_number = self.barcode_var.get().strip()
+        if not serial_number:
+            messagebox.showwarning("Warning", "Please enter a serial number!")
             return
         
-        self.status_var.set(f"Searching for: {search_term}")
+        self.status_var.set(f"Searching for serial number: {serial_number}")
         
-        # Search in all string columns for the term
+        # Find the SL.From and SL.End columns
+        sl_from_col = self.find_column(['SL.From', 'SL From', 'SL_From', 'Serial From', 'From'])
+        sl_end_col = self.find_column(['SL.End', 'SL End', 'SL_End', 'Serial End', 'End', 'To'])
+        
+        if not sl_from_col or not sl_end_col:
+            messagebox.showerror("Error", 
+                f"Could not find serial range columns!\n"
+                f"Looking for columns like: SL.From, SL From, SL.End, SL End\n"
+                f"Available columns: {', '.join(self.df.columns)}")
+            return
+        
+        # Extract numeric part from serial number
+        input_serial_num = self.extract_serial_number(serial_number)
+        if input_serial_num is None:
+            messagebox.showerror("Error", f"Could not extract numeric part from serial number: {serial_number}")
+            return
+        
+        # Search for matching range
         found_rows = []
         
         for idx, row in self.df.iterrows():
-            for col in self.df.columns:
-                cell_value = str(row[col]).strip()
-                if search_term.upper() in cell_value.upper():
+            try:
+                # Get range values
+                from_val = row[sl_from_col]
+                end_val = row[sl_end_col]
+                
+                # Skip rows with empty range values
+                if pd.isna(from_val) or pd.isna(end_val):
+                    continue
+                
+                # Extract numeric parts from range
+                from_num = self.extract_serial_number(str(from_val))
+                end_num = self.extract_serial_number(str(end_val))
+                
+                if from_num is None or end_num is None:
+                    continue
+                
+                # Check if input serial number is within range
+                if from_num <= input_serial_num <= end_num:
                     found_rows.append((idx, row))
-                    break  # Found in this row, move to next row
+                    print(f"Found match: {serial_number} ({input_serial_num}) is between {from_val} ({from_num}) and {end_val} ({end_num})")
+                
+            except Exception as e:
+                print(f"Error processing row {idx}: {e}")
+                continue
         
         if not found_rows:
             self.results_text.delete(1.0, tk.END)
-            self.results_text.insert(tk.END, f"No data found for: {search_term}\n\n")
+            self.results_text.insert(tk.END, f"No range found for serial number: {serial_number}\n")
+            self.results_text.insert(tk.END, f"Extracted numeric value: {input_serial_num}\n\n")
+            self.results_text.insert(tk.END, f"Searching in columns: {sl_from_col} to {sl_end_col}\n")
             self.current_excel_data = None
-            self.status_var.set(f"No data found for: {search_term}")
+            self.status_var.set(f"No range found for serial: {serial_number}")
             self.update_preview()
             return
         
         # Show found data
         self.results_text.delete(1.0, tk.END)
-        self.results_text.insert(tk.END, f"Found {len(found_rows)} matching record(s):\n\n")
+        self.results_text.insert(tk.END, f"Serial number {serial_number} found in range!\n")
+        self.results_text.insert(tk.END, f"Numeric value: {input_serial_num}\n\n")
         
         for i, (idx, row) in enumerate(found_rows):
             self.results_text.insert(tk.END, f"=== Match {i+1} ===\n")
+            self.results_text.insert(tk.END, f"Range: {row[sl_from_col]} to {row[sl_end_col]}\n")
             for col, val in row.items():
                 self.results_text.insert(tk.END, f"{col}: {val}\n")
             self.results_text.insert(tk.END, "\n")
         
         # Use first match for label generation
         self.current_excel_data = found_rows[0][1].to_dict()
-        self.status_var.set(f"Found {len(found_rows)} match(es) - Preview updated")
+        self.status_var.set(f"Found serial range match - Preview updated")
         self.update_preview()
     
     def generate_barcode(self, data, width=280, height=25):
@@ -625,6 +665,51 @@ class EnhancedBarcodeLabelApp:
         
         return img
     
+    def find_column(self, possible_names):
+        """Find a column that matches one of the possible names"""
+        if self.df is None:
+            return None
+            
+        for possible_name in possible_names:
+            for col in self.df.columns:
+                if possible_name.upper() in str(col).upper():
+                    return col
+        return None
+    
+    def extract_serial_number(self, serial_str):
+        """Extract numeric part from serial number string"""
+        import re
+        
+        # Remove whitespace
+        serial_str = str(serial_str).strip()
+        
+        # Try different patterns to extract numbers
+        patterns = [
+            r'(\d+)$',           # Numbers at the end
+            r'(\d+)',            # Any numbers
+            r'(\d+)-(\d+)',      # Pattern like CDL2349-1195, take the last number
+        ]
+        
+        for pattern in patterns:
+            matches = re.findall(pattern, serial_str)
+            if matches:
+                if isinstance(matches[0], tuple):
+                    # For patterns like CDL2349-1195, take the last number
+                    return int(matches[0][-1])
+                else:
+                    # Take the last match (most specific)
+                    return int(matches[-1])
+        
+        # If no pattern matches, try to extract any digits and combine them
+        digits = re.findall(r'\d', serial_str)
+        if digits:
+            try:
+                return int(''.join(digits))
+            except ValueError:
+                pass
+        
+        return None
+    
     def get_field_data(self, field_names):
         """Get data for a field from Excel using multiple possible column names"""
         if not self.current_excel_data:
@@ -789,7 +874,7 @@ class EnhancedBarcodeLabelApp:
         self.results_text.delete(1.0, tk.END)
         self.current_excel_data = None
         self.barcode_entry.focus()
-        self.status_var.set("Cleared - Ready for new search")
+        self.status_var.set("Cleared - Ready for new serial number lookup")
         self.update_preview()
     
     def run(self):
