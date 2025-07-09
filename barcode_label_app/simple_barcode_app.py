@@ -259,17 +259,6 @@ class EnhancedBarcodeLabelApp:
         self.root.bind('<Control-s>', lambda e: self.save_settings())
         self.root.bind('<Control-S>', lambda e: self.save_settings())
         
-        # Results section in Main tab
-        results_frame = ttk.LabelFrame(main_tab, text="Found Data", padding="10")
-        results_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
-        self.results_text = tk.Text(results_frame, height=6, font=('Courier', 9))
-        scrollbar = ttk.Scrollbar(results_frame, orient=tk.VERTICAL, command=self.results_text.yview)
-        self.results_text.configure(yscrollcommand=scrollbar.set)
-        
-        self.results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
         # Action buttons in Main tab
         action_frame = ttk.LabelFrame(main_tab, text="Actions", padding="10")
         action_frame.pack(fill=tk.X)
@@ -607,32 +596,19 @@ class EnhancedBarcodeLabelApp:
                 continue
         
         if not found_rows:
-            self.results_text.delete(1.0, tk.END)
-            self.results_text.insert(tk.END, f"No range found for serial number: {serial_number}\n")
-            self.results_text.insert(tk.END, f"Extracted numeric value: {input_serial_num}\n\n")
-            self.results_text.insert(tk.END, f"Searching in columns: {sl_from_col} to {sl_end_col}\n")
+            messagebox.showerror("Error", f"No range found for serial number: {serial_number}")
             self.current_excel_data = None
             self.status_var.set(f"No range found for serial: {serial_number}")
             self.update_preview()
             return
         
-        # Show found data
-        self.results_text.delete(1.0, tk.END)
-        self.results_text.insert(tk.END, f"Serial number {serial_number} found in range!\n")
-        self.results_text.insert(tk.END, f"Numeric value: {input_serial_num}\n\n")
-        
-        for i, (idx, row) in enumerate(found_rows):
-            self.results_text.insert(tk.END, f"=== Match {i+1} ===\n")
-            self.results_text.insert(tk.END, f"Range: {row[sl_from_col]} to {row[sl_end_col]}\n")
-            for col, val in row.items():
-                self.results_text.insert(tk.END, f"{col}: {val}\n")
-            self.results_text.insert(tk.END, "\n")
-        
         # Use first match for label generation
         self.current_excel_data = found_rows[0][1].to_dict()
-        self.status_var.set(f"Found serial range match - Preview updated")
         self.update_preview()
         self.print_label()
+        self.status_var.set(f"Scanned {serial_number} - sent to printer")
+        self.barcode_var.set("")
+        self.barcode_entry.focus()
     
     def generate_barcode(self, data, width=280, height=25):
         """Generate a clean Code128 barcode using treepoem (no text)"""
