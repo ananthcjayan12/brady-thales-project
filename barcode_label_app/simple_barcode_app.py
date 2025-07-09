@@ -948,7 +948,7 @@ class EnhancedBarcodeLabelApp:
                 
                 # Send directly to default printer on all platforms
                 if platform.system() == "Windows":
-                    os.startfile(tmp.name, "print")
+                    subprocess.run(["mspaint", "/pt", tmp.name], check=True)
                 else:
                     subprocess.run(["lp", tmp.name], check=True)
                 
