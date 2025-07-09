@@ -941,6 +941,7 @@ class EnhancedBarcodeLabelApp:
             import tempfile
             import subprocess
             import platform
+            import shutil
             
             # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
@@ -948,7 +949,19 @@ class EnhancedBarcodeLabelApp:
                 
                 # Send directly to default printer on all platforms
                 if platform.system() == "Windows":
-                    subprocess.run(["mspaint", "/pt", tmp.name], check=True)
+                    # Try silent printing with mspaint, fallback to default print verb
+                    try:
+                        paint_exe = shutil.which("mspaint")
+                        windir = os.environ.get("WINDIR", "C:\\Windows")
+                        if not paint_exe:
+                            candidate = os.path.join(windir, "System32", "mspaint.exe")
+                            if not os.path.exists(candidate):
+                                candidate = os.path.join(windir, "Sysnative", "mspaint.exe")
+                            paint_exe = candidate
+                        subprocess.run([paint_exe, "/pt", tmp.name], check=True)
+                    except FileNotFoundError:
+                        # Fallback to default print (may show dialog)
+                        os.startfile(tmp.name, "print")
                 else:
                     subprocess.run(["lp", tmp.name], check=True)
                 
