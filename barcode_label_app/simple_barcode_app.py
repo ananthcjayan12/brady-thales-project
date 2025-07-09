@@ -949,19 +949,26 @@ class EnhancedBarcodeLabelApp:
                 
                 # Send directly to default printer on all platforms
                 if platform.system() == "Windows":
-                    # Try silent printing with mspaint, fallback to default print verb
                     try:
-                        paint_exe = shutil.which("mspaint")
-                        windir = os.environ.get("WINDIR", "C:\\Windows")
-                        if not paint_exe:
-                            candidate = os.path.join(windir, "System32", "mspaint.exe")
-                            if not os.path.exists(candidate):
-                                candidate = os.path.join(windir, "Sysnative", "mspaint.exe")
-                            paint_exe = candidate
-                        subprocess.run([paint_exe, "/pt", tmp.name], check=True)
-                    except FileNotFoundError:
-                        # Fallback to default print (may show dialog)
-                        os.startfile(tmp.name, "print")
+                        import win32print, win32ui, win32con
+                        from PIL import ImageWin
+
+                        # Get default printer device context
+                        printer_name = win32print.GetDefaultPrinter()
+                        hDC = win32ui.CreateDC()
+                        hDC.CreatePrinterDC(printer_name)
+                        hDC.StartDoc("Label")
+                        hDC.StartPage()
+
+                        # Print image via Device Independent Bitmap
+                        dib = ImageWin.Dib(self.current_label)
+                        dib.draw(hDC.GetHandleOutput(), (0, 0, self.current_label.width, self.current_label.height))
+
+                        hDC.EndPage()
+                        hDC.EndDoc()
+                        hDC.DeleteDC()
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Windows print failure: {e}")
                 else:
                     subprocess.run(["lp", tmp.name], check=True)
                 
