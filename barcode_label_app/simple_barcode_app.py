@@ -612,35 +612,26 @@ class EnhancedBarcodeLabelApp:
     
     def generate_barcode(self, data, width=280, height=25):
         """Generate a clean Code128 barcode using treepoem (no text)"""
+        # Attempt using treepoem only if Ghostscript is available
         try:
+            import shutil
+            # Check for Ghostscript executable
+            if not (shutil.which('gs') or shutil.which('gswin64c')):
+                raise ImportError('Ghostscript not found')
             import treepoem
-            
-            # Generate Code128 barcode with treepoem (much cleaner!)
+            # Generate Code128 barcode
             barcode_img = treepoem.generate_barcode(
                 barcode_type='code128',
                 data=data,
-                options={
-                    'includetext': False,  # No text in barcode
-                    'textsize': 0,         # No text size
-                    'height': 0.5,         # Bar height ratio
-                    'width': 0.02          # Bar width
-                }
+                options={'includetext': False, 'textsize': 0, 'height': 0.5, 'width': 0.02}
             )
-            
-            # Convert to RGB if needed
             if barcode_img.mode != 'RGB':
                 barcode_img = barcode_img.convert('RGB')
-            
-            # Resize to exact dimensions
-            barcode_final = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
-            
-            return barcode_final
-            
-        except ImportError:
-            print("treepoem not installed, using fallback barcode generation")
-            return self.generate_simple_barcode(data, width, height)
+            return barcode_img.resize((width, height), Image.Resampling.LANCZOS)
         except Exception as e:
-            print(f"Error with treepoem: {e}, using fallback")
+            # Fallback to simple barcode and report error
+            print(f"Barcode generator error: {e}")
+            self.status_var.set(f"Barcode error: {e}")
             return self.generate_simple_barcode(data, width, height)
     
     def generate_simple_barcode(self, data, width=280, height=25):
@@ -949,24 +940,32 @@ class EnhancedBarcodeLabelApp:
                 
                 # Send directly to default printer on all platforms
                 if platform.system() == "Windows":
+                    # Try Win32 direct printing, fallback to PDF print on ImportError
                     try:
                         import win32print, win32ui, win32con
                         from PIL import ImageWin
 
-                        # Get default printer device context
                         printer_name = win32print.GetDefaultPrinter()
                         hDC = win32ui.CreateDC()
                         hDC.CreatePrinterDC(printer_name)
                         hDC.StartDoc("Label")
                         hDC.StartPage()
 
-                        # Print image via Device Independent Bitmap
                         dib = ImageWin.Dib(self.current_label)
                         dib.draw(hDC.GetHandleOutput(), (0, 0, self.current_label.width, self.current_label.height))
 
                         hDC.EndPage()
                         hDC.EndDoc()
                         hDC.DeleteDC()
+                    except ImportError as e:
+                        messagebox.showerror("Error", f"Windows PDF print failure import: {e}")
+                        # Fallback: save as PDF and use default print verb
+                        try:
+                            pdf_tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+                            self.current_label.save(pdf_tmp.name, 'PDF', dpi=(300,300))
+                            os.startfile(pdf_tmp.name, 'print')
+                        except Exception as e:
+                            messagebox.showerror("Error", f"Windows PDF print failure: {e}")
                     except Exception as e:
                         messagebox.showerror("Error", f"Windows print failure: {e}")
                 else:
