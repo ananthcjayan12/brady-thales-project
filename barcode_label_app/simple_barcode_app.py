@@ -623,7 +623,7 @@ class EnhancedBarcodeLabelApp:
             barcode_img = treepoem.generate_barcode(
                 barcode_type='code128',
                 data=data,
-                options={'includetext': False, 'textsize': 0, 'height': 0.5, 'width': 0.02}
+                options={'includetext': False, 'height': 0.5, 'width': 0.02}
             )
             if barcode_img.mode != 'RGB':
                 barcode_img = barcode_img.convert('RGB')
