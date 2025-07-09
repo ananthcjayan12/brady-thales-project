@@ -206,14 +206,21 @@ class EnhancedBarcodeLabelApp:
         self.setup_right_panel(right_frame)
     
     def setup_left_panel(self, parent):
-        """Setup left control panel"""
-        # Title - smaller for compact layout
-        title = ttk.Label(parent, text="Barcode Scanner & Label Generator", 
-                         font=('Arial', 14, 'bold'))
+        """Setup left control panel with Main and Settings tabs"""
+        # Create notebook with Main and Settings tabs
+        notebook = ttk.Notebook(parent)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+        main_tab = ttk.Frame(notebook)
+        settings_tab = ttk.Frame(notebook)
+        notebook.add(main_tab, text='Main')
+        notebook.add(settings_tab, text='Settings')
+
+        # Title in Main tab
+        title = ttk.Label(main_tab, text='Barcode Scanner & Label Generator', font=('Arial', 14, 'bold'))
         title.pack(pady=(0, 10))
         
-        # Excel file selection
-        excel_frame = ttk.LabelFrame(parent, text="Excel File", padding="10")
+        # Excel file selection in Main tab
+        excel_frame = ttk.LabelFrame(main_tab, text="Excel File", padding="10")
         excel_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.excel_path_var = tk.StringVar(value=self.excel_file)
@@ -226,8 +233,8 @@ class EnhancedBarcodeLabelApp:
         ttk.Button(path_frame, text="Browse", command=self.browse_excel).pack(side=tk.RIGHT, padx=(5, 0))
         ttk.Button(path_frame, text="Load", command=self.load_selected_excel).pack(side=tk.RIGHT, padx=(5, 0))
         
-        # Input section
-        input_frame = ttk.LabelFrame(parent, text="Barcode Input", padding="10")
+        # Input section in Main tab
+        input_frame = ttk.LabelFrame(main_tab, text="Barcode Input", padding="10")
         input_frame.pack(fill=tk.X, pady=(0, 10))
         
         ttk.Label(input_frame, text="Scan or type serial number:").pack(anchor=tk.W)
@@ -252,8 +259,8 @@ class EnhancedBarcodeLabelApp:
         self.root.bind('<Control-s>', lambda e: self.save_settings())
         self.root.bind('<Control-S>', lambda e: self.save_settings())
         
-        # Results section
-        results_frame = ttk.LabelFrame(parent, text="Found Data", padding="10")
+        # Results section in Main tab
+        results_frame = ttk.LabelFrame(main_tab, text="Found Data", padding="10")
         results_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
         self.results_text = tk.Text(results_frame, height=6, font=('Courier', 9))
@@ -263,14 +270,8 @@ class EnhancedBarcodeLabelApp:
         self.results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Label controls
-        controls_frame = ttk.LabelFrame(parent, text="Label Settings", padding="10")
-        controls_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        self.setup_label_controls(controls_frame)
-        
-        # Action buttons
-        action_frame = ttk.LabelFrame(parent, text="Actions", padding="10")
+        # Action buttons in Main tab
+        action_frame = ttk.LabelFrame(main_tab, text="Actions", padding="10")
         action_frame.pack(fill=tk.X)
         
         ttk.Button(action_frame, text="Update Preview", command=self.update_preview).pack(side=tk.LEFT, padx=(0, 5))
@@ -280,160 +281,17 @@ class EnhancedBarcodeLabelApp:
         # Status bar
         self.status_var = tk.StringVar()
         self.status_var.set("Ready - Select Excel file and enter serial number for range lookup")
-        status_bar = ttk.Label(parent, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
+        status_bar = ttk.Label(main_tab, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(fill=tk.X, pady=(10, 0))
-    
-    def setup_label_controls(self, parent):
-        """Setup label adjustment controls"""
-        # Create a scrollable frame for controls - reduced height for smaller screens
-        canvas = tk.Canvas(parent, height=150)
-        scrollbar_ctrl = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        scrollable_frame = ttk.Frame(canvas)
+
+        # Label controls in Settings tab
+        controls_frame = ttk.LabelFrame(settings_tab, text="Label Settings", padding="10")
+        controls_frame.pack(fill=tk.X, pady=(0, 10))
         
-        scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        self.setup_label_controls(controls_frame)
         
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar_ctrl.set)
-        
-        # Add mouse wheel scrolling - cross-platform
-        def _on_mousewheel(event):
-            # Different platforms use different delta values
-            if event.delta:
-                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
-            else:
-                # For Linux/Unix systems
-                if event.num == 4:
-                    canvas.yview_scroll(-1, "units")
-                elif event.num == 5:
-                    canvas.yview_scroll(1, "units")
-        
-        def _bind_to_mousewheel(event):
-            canvas.bind_all("<MouseWheel>", _on_mousewheel)
-            canvas.bind_all("<Button-4>", _on_mousewheel)  # Linux
-            canvas.bind_all("<Button-5>", _on_mousewheel)  # Linux
-            
-        def _unbind_from_mousewheel(event):
-            canvas.unbind_all("<MouseWheel>")
-            canvas.unbind_all("<Button-4>")
-            canvas.unbind_all("<Button-5>")
-            
-        canvas.bind('<Enter>', _bind_to_mousewheel)
-        canvas.bind('<Leave>', _unbind_from_mousewheel)
-        
-        # Label dimensions (83mm x 32mm) - more compact
-        dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="3")
-        dims_frame.pack(fill=tk.X, pady=(0, 3))
-        
-        ttk.Label(dims_frame, text="Width:").grid(row=0, column=0, sticky=tk.W)
-        self.width_var = tk.IntVar(value=self.label_settings['width'])
-        ttk.Scale(dims_frame, from_=300, to=700, variable=self.width_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
-        ttk.Label(dims_frame, textvariable=self.width_var).grid(row=0, column=2)
-        
-        ttk.Label(dims_frame, text="Height:").grid(row=1, column=0, sticky=tk.W)
-        self.height_var = tk.IntVar(value=self.label_settings['height'])
-        ttk.Scale(dims_frame, from_=100, to=300, variable=self.height_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
-        ttk.Label(dims_frame, textvariable=self.height_var).grid(row=1, column=2)
-        
-        dims_frame.columnconfigure(1, weight=1)
-        
-        # Position controls for new label format - more compact
-        pos_frame = ttk.LabelFrame(scrollable_frame, text="Positions", padding="3")
-        pos_frame.pack(fill=tk.X, pady=(0, 3))
-        
-        # Logo position
-        ttk.Label(pos_frame, text="Logo X:").grid(row=0, column=0, sticky=tk.W)
-        self.logo_x_var = tk.IntVar(value=self.label_settings['logo_x'])
-        ttk.Scale(pos_frame, from_=0, to=200, variable=self.logo_x_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
-        
-        ttk.Label(pos_frame, text="Logo Y:").grid(row=1, column=0, sticky=tk.W)
-        self.logo_y_var = tk.IntVar(value=self.label_settings['logo_y'])
-        ttk.Scale(pos_frame, from_=0, to=100, variable=self.logo_y_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
-        
-        # P/D position
-        ttk.Label(pos_frame, text="P/D X:").grid(row=2, column=0, sticky=tk.W)
-        self.pd_x_var = tk.IntVar(value=self.label_settings['pd_x'])
-        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pd_x_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW)
-        
-        ttk.Label(pos_frame, text="P/D Y:").grid(row=3, column=0, sticky=tk.W)
-        self.pd_y_var = tk.IntVar(value=self.label_settings['pd_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pd_y_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=3, column=1, sticky=tk.EW)
-        
-        # P/N position
-        ttk.Label(pos_frame, text="P/N X:").grid(row=4, column=0, sticky=tk.W)
-        self.pn_x_var = tk.IntVar(value=self.label_settings['pn_x'])
-        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pn_x_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=4, column=1, sticky=tk.EW)
-        
-        ttk.Label(pos_frame, text="P/N Y:").grid(row=5, column=0, sticky=tk.W)
-        self.pn_y_var = tk.IntVar(value=self.label_settings['pn_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pn_y_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=5, column=1, sticky=tk.EW)
-        
-        # P/R position
-        ttk.Label(pos_frame, text="P/R X:").grid(row=6, column=0, sticky=tk.W)
-        self.pr_x_var = tk.IntVar(value=self.label_settings['pr_x'])
-        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pr_x_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=6, column=1, sticky=tk.EW)
-        
-        ttk.Label(pos_frame, text="P/R Y:").grid(row=7, column=0, sticky=tk.W)
-        self.pr_y_var = tk.IntVar(value=self.label_settings['pr_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pr_y_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=7, column=1, sticky=tk.EW)
-        
-        # S/N position
-        ttk.Label(pos_frame, text="S/N X:").grid(row=8, column=0, sticky=tk.W)
-        self.sn_x_var = tk.IntVar(value=self.label_settings['sn_x'])
-        ttk.Scale(pos_frame, from_=0, to=480, variable=self.sn_x_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=8, column=1, sticky=tk.EW)
-        
-        ttk.Label(pos_frame, text="S/N Y:").grid(row=9, column=0, sticky=tk.W)
-        self.sn_y_var = tk.IntVar(value=self.label_settings['sn_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.sn_y_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=9, column=1, sticky=tk.EW)
-        
-        pos_frame.columnconfigure(1, weight=1)
-        
-        # Logo settings - more compact
-        logo_frame = ttk.LabelFrame(scrollable_frame, text="Logo", padding="3")
-        logo_frame.pack(fill=tk.X, pady=(0, 3))
-        
-        ttk.Label(logo_frame, text="Logo File:").grid(row=0, column=0, sticky=tk.W)
-        self.logo_path_var = tk.StringVar(value=self.label_settings['logo_path'] or "No logo selected")
-        logo_entry = ttk.Entry(logo_frame, textvariable=self.logo_path_var, state='readonly')
-        logo_entry.grid(row=0, column=1, sticky=tk.EW, padx=(5, 0))
-        
-        ttk.Button(logo_frame, text="Browse", command=self.browse_logo).grid(row=0, column=2, padx=(5, 0))
-        ttk.Button(logo_frame, text="Clear", command=self.clear_logo).grid(row=0, column=3, padx=(5, 0))
-        
-        # Logo size controls
-        ttk.Label(logo_frame, text="Logo Width:").grid(row=1, column=0, sticky=tk.W)
-        self.logo_width_var = tk.IntVar(value=self.label_settings['logo_width'])
-        ttk.Scale(logo_frame, from_=50, to=300, variable=self.logo_width_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW, columnspan=2)
-        ttk.Label(logo_frame, textvariable=self.logo_width_var).grid(row=1, column=3)
-        
-        ttk.Label(logo_frame, text="Logo Height:").grid(row=2, column=0, sticky=tk.W)
-        self.logo_height_var = tk.IntVar(value=self.label_settings['logo_height'])
-        ttk.Scale(logo_frame, from_=20, to=100, variable=self.logo_height_var, 
-                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW, columnspan=2)
-        ttk.Label(logo_frame, textvariable=self.logo_height_var).grid(row=2, column=3)
-        
-        logo_frame.columnconfigure(1, weight=1)
-        
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar_ctrl.pack(side="right", fill="y")
-        
-        # Settings management buttons - moved outside scrollable area for better access
-        settings_mgmt_frame = ttk.LabelFrame(parent, text="Settings Management", padding="5")
+        # Settings management buttons in Settings tab
+        settings_mgmt_frame = ttk.LabelFrame(settings_tab, text="Settings Management", padding="5")
         settings_mgmt_frame.pack(fill=tk.X, pady=(5, 0))
         
         # First row of buttons
@@ -455,6 +313,155 @@ class EnhancedBarcodeLabelApp:
             self.settings_status_var.set("✓ Settings loaded from saved file")
         else:
             self.settings_status_var.set("Using default settings")
+    
+    def setup_label_controls(self, parent):
+        """Setup label adjustment controls"""
+        # Create a scrollable frame for controls - reduced height for smaller screens
+        canvas = tk.Canvas(parent, height=150)
+        scrollbar_ctrl = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar_ctrl.set)
+
+        # Add mouse wheel scrolling - cross-platform
+        def _on_mousewheel(event):
+            # Different platforms use different delta values
+            if event.delta:
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            else:
+                # For Linux/Unix systems
+                if event.num == 4:
+                    canvas.yview_scroll(-1, "units")
+                elif event.num == 5:
+                    canvas.yview_scroll(1, "units")
+
+        def _bind_to_mousewheel(event):
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            canvas.bind_all("<Button-4>", _on_mousewheel)  # Linux
+            canvas.bind_all("<Button-5>", _on_mousewheel)  # Linux
+        
+        def _unbind_from_mousewheel(event):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+        
+        canvas.bind('<Enter>', _bind_to_mousewheel)
+        canvas.bind('<Leave>', _unbind_from_mousewheel)
+
+        # Label dimensions (83mm x 32mm) - more compact
+        dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="3")
+        dims_frame.pack(fill=tk.X, pady=(0, 3))
+
+        ttk.Label(dims_frame, text="Width:").grid(row=0, column=0, sticky=tk.W)
+        self.width_var = tk.IntVar(value=self.label_settings['width'])
+        ttk.Scale(dims_frame, from_=300, to=700, variable=self.width_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
+        ttk.Label(dims_frame, textvariable=self.width_var).grid(row=0, column=2)
+
+        ttk.Label(dims_frame, text="Height:").grid(row=1, column=0, sticky=tk.W)
+        self.height_var = tk.IntVar(value=self.label_settings['height'])
+        ttk.Scale(dims_frame, from_=100, to=300, variable=self.height_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
+        ttk.Label(dims_frame, textvariable=self.height_var).grid(row=1, column=2)
+
+        dims_frame.columnconfigure(1, weight=1)
+
+        # Position controls for new label format - more compact
+        pos_frame = ttk.LabelFrame(scrollable_frame, text="Positions", padding="3")
+        pos_frame.pack(fill=tk.X, pady=(0, 3))
+
+        # Logo position
+        ttk.Label(pos_frame, text="Logo X:").grid(row=0, column=0, sticky=tk.W)
+        self.logo_x_var = tk.IntVar(value=self.label_settings['logo_x'])
+        ttk.Scale(pos_frame, from_=0, to=200, variable=self.logo_x_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW)
+        
+        ttk.Label(pos_frame, text="Logo Y:").grid(row=1, column=0, sticky=tk.W)
+        self.logo_y_var = tk.IntVar(value=self.label_settings['logo_y'])
+        ttk.Scale(pos_frame, from_=0, to=100, variable=self.logo_y_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
+
+        # P/D position
+        ttk.Label(pos_frame, text="P/D X:").grid(row=2, column=0, sticky=tk.W)
+        self.pd_x_var = tk.IntVar(value=self.label_settings['pd_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pd_x_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW)
+
+        ttk.Label(pos_frame, text="P/D Y:").grid(row=3, column=0, sticky=tk.W)
+        self.pd_y_var = tk.IntVar(value=self.label_settings['pd_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pd_y_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=3, column=1, sticky=tk.EW)
+
+        # P/N position
+        ttk.Label(pos_frame, text="P/N X:").grid(row=4, column=0, sticky=tk.W)
+        self.pn_x_var = tk.IntVar(value=self.label_settings['pn_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pn_x_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=4, column=1, sticky=tk.EW)
+
+        ttk.Label(pos_frame, text="P/N Y:").grid(row=5, column=0, sticky=tk.W)
+        self.pn_y_var = tk.IntVar(value=self.label_settings['pn_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pn_y_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=5, column=1, sticky=tk.EW)
+
+        # P/R position
+        ttk.Label(pos_frame, text="P/R X:").grid(row=6, column=0, sticky=tk.W)
+        self.pr_x_var = tk.IntVar(value=self.label_settings['pr_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.pr_x_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=6, column=1, sticky=tk.EW)
+
+        ttk.Label(pos_frame, text="P/R Y:").grid(row=7, column=0, sticky=tk.W)
+        self.pr_y_var = tk.IntVar(value=self.label_settings['pr_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pr_y_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=7, column=1, sticky=tk.EW)
+
+        # S/N position
+        ttk.Label(pos_frame, text="S/N X:").grid(row=8, column=0, sticky=tk.W)
+        self.sn_x_var = tk.IntVar(value=self.label_settings['sn_x'])
+        ttk.Scale(pos_frame, from_=0, to=480, variable=self.sn_x_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=8, column=1, sticky=tk.EW)
+
+        ttk.Label(pos_frame, text="S/N Y:").grid(row=9, column=0, sticky=tk.W)
+        self.sn_y_var = tk.IntVar(value=self.label_settings['sn_y'])
+        ttk.Scale(pos_frame, from_=0, to=180, variable=self.sn_y_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=9, column=1, sticky=tk.EW)
+
+        pos_frame.columnconfigure(1, weight=1)
+
+        # Logo settings - more compact
+        logo_frame = ttk.LabelFrame(scrollable_frame, text="Logo", padding="3")
+        logo_frame.pack(fill=tk.X, pady=(0, 3))
+
+        ttk.Label(logo_frame, text="Logo File:").grid(row=0, column=0, sticky=tk.W)
+        self.logo_path_var = tk.StringVar(value=self.label_settings['logo_path'] or "No logo selected")
+        logo_entry = ttk.Entry(logo_frame, textvariable=self.logo_path_var, state='readonly')
+        logo_entry.grid(row=0, column=1, sticky=tk.EW, padx=(5, 0))
+
+        ttk.Button(logo_frame, text="Browse", command=self.browse_logo).grid(row=0, column=2, padx=(5, 0))
+        ttk.Button(logo_frame, text="Clear", command=self.clear_logo).grid(row=0, column=3, padx=(5, 0))
+
+        # Logo size controls
+        ttk.Label(logo_frame, text="Logo Width:").grid(row=1, column=0, sticky=tk.W)
+        self.logo_width_var = tk.IntVar(value=self.label_settings['logo_width'])
+        ttk.Scale(logo_frame, from_=50, to=300, variable=self.logo_width_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(logo_frame, textvariable=self.logo_width_var).grid(row=1, column=3)
+
+        ttk.Label(logo_frame, text="Logo Height:").grid(row=2, column=0, sticky=tk.W)
+        self.logo_height_var = tk.IntVar(value=self.label_settings['logo_height'])
+        ttk.Scale(logo_frame, from_=20, to=100, variable=self.logo_height_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(logo_frame, textvariable=self.logo_height_var).grid(row=2, column=3)
+
+        logo_frame.columnconfigure(1, weight=1)
+
+        canvas.pack(side='left', fill='both', expand=True)
+        scrollbar_ctrl.pack(side='right', fill='y')
     
     def setup_right_panel(self, parent):
         """Setup right preview panel"""
@@ -625,6 +632,7 @@ class EnhancedBarcodeLabelApp:
         self.current_excel_data = found_rows[0][1].to_dict()
         self.status_var.set(f"Found serial range match - Preview updated")
         self.update_preview()
+        self.print_label()
     
     def generate_barcode(self, data, width=280, height=25):
         """Generate a clean Code128 barcode using treepoem (no text)"""
@@ -962,16 +970,11 @@ class EnhancedBarcodeLabelApp:
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
                 self.current_label.save(tmp.name, 'PNG', dpi=(300, 300))
                 
-                # Open with default program (which should allow printing)
-                if platform.system() == "Darwin":  # macOS
-                    subprocess.run(["open", tmp.name])
-                elif platform.system() == "Windows":
-                    os.startfile(tmp.name)
-                else:  # Linux
-                    subprocess.run(["xdg-open", tmp.name])
-                
-                messagebox.showinfo("Print", "Label opened in default program for printing")
-                self.status_var.set("Label sent to default program for printing")
+                # Send directly to default printer on all platforms
+                if platform.system() == "Windows":
+                    os.startfile(tmp.name, "print")
+                else:
+                    subprocess.run(["lp", tmp.name], check=True)
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error printing label: {e}")
