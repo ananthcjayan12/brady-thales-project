@@ -15,6 +15,8 @@ import qrcode
 import os
 import json
 from datetime import datetime
+import win32print, win32ui, win32con
+from PIL import Image, ImageDraw, ImageWin
 
 class EnhancedBarcodeLabelApp:
     def __init__(self):
@@ -923,56 +925,46 @@ class EnhancedBarcodeLabelApp:
             messagebox.showerror("Error", f"Error saving label: {e}")
     
     def print_label(self):
-        """Print the current label"""
+        """Print the current label using simple approach"""
         if not self.current_label:
             messagebox.showwarning("Warning", "No label to print!")
             return
         
         try:
             import tempfile
-            import subprocess
-            import platform
-            import shutil
             
             # Save to temporary file
             with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
                 self.current_label.save(tmp.name, 'PNG', dpi=(300, 300))
+                tmp_path = tmp.name
                 
-                # Send directly to default printer on all platforms
-                if platform.system() == "Windows":
-                    # Try Win32 direct printing, fallback to PDF print on ImportError
-                    try:
-                        import win32print, win32ui, win32con
-                        from PIL import ImageWin
-
-                        printer_name = win32print.GetDefaultPrinter()
-                        hDC = win32ui.CreateDC()
-                        hDC.CreatePrinterDC(printer_name)
-                        hDC.StartDoc("Label")
-                        hDC.StartPage()
-
-                        dib = ImageWin.Dib(self.current_label)
-                        dib.draw(hDC.GetHandleOutput(), (0, 0, self.current_label.width, self.current_label.height))
-
-                        hDC.EndPage()
-                        hDC.EndDoc()
-                        hDC.DeleteDC()
-                    except ImportError as e:
-                        messagebox.showerror("Error", f"Windows PDF print failure import: {e}")
-                        # Fallback: save as PDF and use default print verb
-                        try:
-                            pdf_tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
-                            self.current_label.save(pdf_tmp.name, 'PDF', dpi=(300,300))
-                            os.startfile(pdf_tmp.name, 'print')
-                        except Exception as e:
-                            messagebox.showerror("Error", f"Windows PDF print failure: {e}")
-                    except Exception as e:
-                        messagebox.showerror("Error", f"Windows print failure: {e}")
-                else:
-                    subprocess.run(["lp", tmp.name], check=True)
+                # Use simple printing approach like samplepdfprint.py
+                printer_name = win32print.GetDefaultPrinter()
+                print(f"Using printer: {printer_name}")
+                
+                hDC = win32ui.CreateDC()
+                hDC.CreatePrinterDC(printer_name)
+                bmp = Image.open(tmp_path)
+                printable_area = (hDC.GetDeviceCaps(win32con.HORZRES),
+                                hDC.GetDeviceCaps(win32con.VERTRES))
+                ratio = min(printable_area[0] / bmp.size[0], printable_area[1] / bmp.size[1])
+                scaled_size = (int(bmp.size[0] * ratio), int(bmp.size[1] * ratio))
+                bmp = bmp.resize(scaled_size)
+                dib = ImageWin.Dib(bmp)
+                hDC.StartDoc("Label Print")
+                hDC.StartPage()
+                x = (printable_area[0] - scaled_size[0]) // 2
+                y = (printable_area[1] - scaled_size[1]) // 2
+                dib.draw(hDC.GetHandleOutput(), (x, y, x + scaled_size[0], y + scaled_size[1]))
+                hDC.EndPage()
+                hDC.EndDoc()
+                hDC.DeleteDC()
+                
+                self.status_var.set("Label printed successfully")
                 
         except Exception as e:
             messagebox.showerror("Error", f"Error printing label: {e}")
+            self.status_var.set(f"Print error: {e}")
     
     def view_excel(self):
         """Show Excel file contents"""
