@@ -18,16 +18,6 @@ from datetime import datetime
 # import win32print, win32ui, win32con
 from PIL import Image, ImageDraw, ImageWin
 
-# PDF generation imports
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import mm, inch, cm
-from reportlab.lib.pagesizes import letter
-from reportlab.graphics.barcode import code128
-from reportlab.graphics import renderPDF
-from reportlab.graphics.shapes import Drawing
-from reportlab.lib.colors import black, blue
-from reportlab.lib.utils import ImageReader
-
 class EnhancedBarcodeLabelApp:
     def __init__(self):
         self.root = tk.Tk()
@@ -50,25 +40,25 @@ class EnhancedBarcodeLabelApp:
         # UI variables (will be initialized in setup_ui)
         self.settings_status_var = None
         
-        # Default label settings - Using exact measurements from debug_label_generator_pdf.py
+        # Default label settings - 83mm x 32mm label (489px x 189px at 150 DPI)
         self.default_settings = {
-            'width': 490,            # 173mm converted to pixels (173 * 2.834)
-            'height': 170,           # 60mm converted to pixels (60 * 2.834)
+            'width': 489,  # 83mm at 150 DPI
+            'height': 220, # Optimized height for barcode layout
             'logo_path': self.get_default_logo_path(),
-            'logo_x': 14,            # 5mm * 2.834
-            'logo_y': 6,             # 2mm * 2.834 
-            'logo_width': 99,        # 35mm * 2.834
-            'logo_height': 48,       # 17mm * 2.834
-            'pd_x': 127,             # 45mm * 2.834
-            'pd_y': 17,              # 6mm * 2.834
-            'pn_x': 127,             # 45mm * 2.834
-            'pn_y': 40,              # 14mm * 2.834
-            'pr_x': 127,             # 45mm * 2.834
-            'pr_y': 82,              # 29mm * 2.834
-            'sn_x': 127,             # 45mm * 2.834
-            'sn_y': 130,             # 46mm * 2.834
-            'barcode_width': 255,    # 90mm * 2.834
-            'barcode_height': 23,    # 8mm * 2.834
+            'logo_x': 15,
+            'logo_y': 5,
+            'logo_width': 150,
+            'logo_height': 40,
+            'pd_x': 190,    # P/D field position
+            'pd_y': 5,
+            'pn_x': 190,    # P/N field position  
+            'pn_y': 35,     # Compact spacing
+            'pr_x': 190,    # P/R field position
+            'pr_y': 70,     # Compact spacing
+            'sn_x': 190,    # S/N field position
+            'sn_y': 105,    # Compact spacing for proper fit
+            'barcode_width': 280,    # Good size for clarity
+            'barcode_height': 30,    # Good height for clarity
             # Font sizes for different text elements
             'font_company_size': 14,     # For company name/logo text
             'font_label_size': 10,       # For P/D, P/N, P/R, S/N labels
@@ -1051,63 +1041,65 @@ class EnhancedBarcodeLabelApp:
             self.preview_canvas.create_text(225, 125, text=f"Preview Error: {e}", anchor=tk.CENTER)
     
     def save_label(self):
-        """Save the current label as PDF"""
+        """Save the current label"""
+        if not self.current_label:
+            messagebox.showwarning("Warning", "No label to save!")
+            return
+        
         try:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"output_labels/label_{timestamp}.pdf"
+            filename = f"output_labels/label_{timestamp}.png"
             
-            # Generate PDF label
-            self.generate_pdf_label(filename)
+            self.current_label.save(filename, 'PNG', dpi=(300, 300))
             
-            # Also save PNG preview for reference
-            if self.current_label:
-                png_filename = f"output_labels/label_{timestamp}.png"
-                self.current_label.save(png_filename, 'PNG', dpi=(300, 300))
-                
-                messagebox.showinfo("Success", f"Label saved as:\nPDF: {filename}\nPNG Preview: {png_filename}")
-                self.status_var.set(f"Label saved: {os.path.basename(filename)} + PNG preview")
-            else:
-                messagebox.showinfo("Success", f"Label saved as PDF:\n{filename}")
-                self.status_var.set(f"Label saved: {os.path.basename(filename)}")
+            messagebox.showinfo("Success", f"Label saved as:\n{filename}")
+            self.status_var.set(f"Label saved: {os.path.basename(filename)}")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error saving label: {e}")
-            print(f"Save error: {e}")  # For debugging
     
     def print_label(self):
-        """Generate and print label as PDF using exact measurements"""
+        """Print the current label using simple approach"""
+        pass
+        if not self.current_label:
+            messagebox.showwarning("Warning", "No label to print!")
+            return
+        
         try:
-            # Generate PDF label with current data
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            pdf_filename = f"output_labels/label_{timestamp}.pdf"
+            import tempfile
             
-            # Generate the PDF
-            self.generate_pdf_label(pdf_filename)
-            
-            # Try to open with default PDF viewer for printing
-            try:
-                import subprocess
-                import platform
+            # Save to temporary file
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as tmp:
+                self.current_label.save(tmp.name, 'PNG', dpi=(300, 300))
+                tmp_path = tmp.name
                 
-                if platform.system() == 'Darwin':  # macOS
-                    subprocess.run(['open', pdf_filename])
-                elif platform.system() == 'Windows':
-                    subprocess.run(['start', pdf_filename], shell=True)
-                else:  # Linux
-                    subprocess.run(['xdg-open', pdf_filename])
+                # Use simple printing approach like samplepdfprint.py
+                printer_name = win32print.GetDefaultPrinter()
+                print(f"Using printer: {printer_name}")
                 
-                self.status_var.set(f"PDF label generated: {pdf_filename} - Opening for printing")
+                hDC = win32ui.CreateDC()
+                hDC.CreatePrinterDC(printer_name)
+                bmp = Image.open(tmp_path)
+                printable_area = (hDC.GetDeviceCaps(win32con.HORZRES),
+                                hDC.GetDeviceCaps(win32con.VERTRES))
+                ratio = min(printable_area[0] / bmp.size[0], printable_area[1] / bmp.size[1])
+                scaled_size = (int(bmp.size[0] * ratio), int(bmp.size[1] * ratio))
+                bmp = bmp.resize(scaled_size)
+                dib = ImageWin.Dib(bmp)
+                hDC.StartDoc("Label Print")
+                hDC.StartPage()
+                x = (printable_area[0] - scaled_size[0]) // 2
+                y = (printable_area[1] - scaled_size[1]) // 2
+                dib.draw(hDC.GetHandleOutput(), (x, y, x + scaled_size[0], y + scaled_size[1]))
+                hDC.EndPage()
+                hDC.EndDoc()
+                hDC.DeleteDC()
                 
-            except Exception as e:
-                # If can't open automatically, just notify user
-                self.status_var.set(f"PDF label saved: {pdf_filename} - Please open manually to print")
-                messagebox.showinfo("PDF Generated", 
-                                  f"Label saved as PDF: {pdf_filename}\n\nPlease open the file to print.")
+                self.status_var.set("Label printed successfully")
                 
         except Exception as e:
-            messagebox.showerror("Error", f"Error generating PDF label: {e}")
-            self.status_var.set(f"PDF generation error: {e}")
-            print(f"PDF generation error: {e}")  # For debugging
+            messagebox.showerror("Error", f"Error printing label: {e}")
+            self.status_var.set(f"Print error: {e}")
     
     def view_excel(self):
         """Show Excel file contents"""
@@ -1176,256 +1168,6 @@ class EnhancedBarcodeLabelApp:
         # Bind canvas resize event to update preview
         self.preview_canvas.bind('<Configure>', lambda e: self.root.after(100, self.update_preview))
         self.root.mainloop()
-
-    def add_logo_to_canvas(self, canvas_obj, logo_path, x_mm, y_mm, width_mm, height_mm):
-        """Add a logo image to the canvas at the specified position and size"""
-        try:
-            # Check if logo file exists
-            if not os.path.exists(logo_path):
-                print(f"Warning: Logo file not found at {logo_path}")
-                return False
-            
-            # Convert mm to points
-            x_pts = x_mm * mm
-            y_pts = y_mm * mm
-            width_pts = width_mm * mm
-            height_pts = height_mm * mm
-            
-            # Load and draw the image
-            canvas_obj.drawImage(logo_path, x_pts, y_pts, width_pts, height_pts)
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error loading logo from {logo_path}: {e}")
-            # Draw a placeholder rectangle if logo fails to load
-            canvas_obj.setStrokeColor(black)
-            canvas_obj.setFillColor("lightgray")
-            canvas_obj.rect(x_mm * mm, y_mm * mm, width_mm * mm, height_mm * mm, fill=1, stroke=1)
-            
-            # Add text placeholder
-            canvas_obj.setFillColor(black)
-            canvas_obj.setFont("Helvetica", 8)
-            canvas_obj.drawString((x_mm + 2) * mm, (y_mm + height_mm/2) * mm, "LOGO")
-            
-            return False
-
-    def create_barcode_directly(self, canvas_obj, data, x, y, width_mm, height_mm):
-        """Create a barcode directly on the canvas using reportlab's built-in Code128 barcode"""
-        try:
-            # Convert mm to points
-            width_pts = width_mm * mm
-            height_pts = height_mm * mm
-            
-            # Calculate the bar width needed to achieve the desired total width
-            # Code128 typically has about 11 bars per character + start/stop patterns
-            # This is an approximation - we'll create the barcode and scale if needed
-            estimated_bars = len(data) * 11 + 35  # Rough estimate including start/stop/check
-            target_bar_width = width_pts / estimated_bars
-            
-            # Ensure minimum bar width for readability (0.3 points minimum)
-            bar_width = max(0.3, target_bar_width)
-            
-            # Create the barcode with calculated bar width
-            # Code128 automatically starts with the correct start pattern (first bar should be black)
-            barcode = code128.Code128(data, 
-                                     barWidth=bar_width,  # Calculated to achieve target width
-                                     barHeight=height_pts,
-                                     humanReadable=False,  # We'll add text separately
-                                     quiet=0)  # No quiet zones - we control positioning
-            
-            # Get the actual width of the generated barcode
-            actual_width = barcode.width
-            
-            # If the barcode is too wide or too narrow, scale it
-            if actual_width > 0:
-                scale_factor = width_pts / actual_width
-                
-                # Save the current graphics state
-                canvas_obj.saveState()
-                
-                # Apply scaling and draw at the correct position
-                canvas_obj.translate(x, y)
-                canvas_obj.scale(scale_factor, 1.0)  # Scale width only, keep height
-                barcode.drawOn(canvas_obj, 0, 0)
-                
-                # Restore the graphics state
-                canvas_obj.restoreState()
-            else:
-                # Fallback: draw without scaling
-                barcode.drawOn(canvas_obj, x, y)
-            
-            return True
-        except Exception as e:
-            print(f"Error creating barcode for '{data}': {e}")
-            # Draw a placeholder rectangle if barcode fails
-            canvas_obj.setStrokeColor(black)
-            canvas_obj.setFillColor(black)
-            canvas_obj.rect(x, y, width_mm * mm, height_mm * mm, fill=0, stroke=1)
-            return False
-
-    def flip_y(self, y_mm, label_height):
-        """Convert top-left Y coordinate to bottom-left for reportlab"""
-        return label_height - (y_mm * mm)
-
-    def generate_pdf_label(self, filename=None):
-        """Generate label as PDF using exact measurements from debug_label_generator_pdf.py"""
-        
-        # Label dimensions in mm (converted from pixels)
-        label_width_mm = 173  # About 490 pixels
-        label_height_mm = 60  # About 170 pixels
-        
-        # Convert to points for reportlab (1 mm = 2.834645669 points)
-        label_width = label_width_mm * mm
-        label_height = label_height_mm * mm
-        
-        # Configuration in mm
-        config_mm = {
-            'logo_x': 5,     # 14px ≈ 5mm
-            'logo_y': 2,     # 6px ≈ 2mm  
-            'logo_width': 35,  # Logo width
-            'logo_height': 17, # Logo height
-            'field_start_x': 45,  # 127px ≈ 45mm
-            'text_offset': 15,     # Offset for barcode/text
-            'barcode_width': 90,  # 255px ≈ 90mm
-            'barcode_height': 8, # 23px ≈ 8mm
-            'field_gap': 5.3,     # Gap between fields
-            'text_bc_offset': 0,  # Text barcode offset
-        }
-        
-        # Field positions in mm (converted from pixel positions)
-        field_positions_mm = {
-            'P/D': 6,   # 17px ≈ 6mm
-            'P/N': 14,  # 40px ≈ 14mm  
-            'P/R': 29,  # 82px ≈ 29mm
-            'S/N': 46   # 130px ≈ 46mm
-        }
-        
-        # Create PDF filename if not provided
-        if not filename:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"output_labels/label_{timestamp}.pdf"
-        
-        # Create PDF canvas with exact label size
-        c = canvas.Canvas(filename, pagesize=(label_width, label_height))
-        
-        # Draw border
-        c.setStrokeColor(black)
-        c.setLineWidth(0.5)
-        c.rect(0, 0, label_width, label_height)
-        
-        # 1. Company logo area
-        # Try to load logo from different possible locations
-        logo_paths = [
-            "logo.png",  # Current directory
-            "assets/logo.png",  # Assets folder
-            "../logo.png",  # Parent directory
-            "assets/logo copy.png"  # Alternative logo
-        ]
-        
-        logo_loaded = False
-        if self.label_settings.get('logo_path') and os.path.exists(self.label_settings['logo_path']):
-            logo_loaded = self.add_logo_to_canvas(c, self.label_settings['logo_path'], 
-                                               config_mm['logo_x'], 
-                                               self.flip_y(config_mm['logo_y'] + config_mm['logo_height'], label_height) / mm,
-                                               config_mm['logo_width'], 
-                                               config_mm['logo_height'])
-        else:
-            for logo_path in logo_paths:
-                if os.path.exists(logo_path):
-                    logo_loaded = self.add_logo_to_canvas(c, logo_path, 
-                                                       config_mm['logo_x'], 
-                                                       self.flip_y(config_mm['logo_y'] + config_mm['logo_height'], label_height) / mm,
-                                                       config_mm['logo_width'], 
-                                                       config_mm['logo_height'])
-                    if logo_loaded:
-                        print(f"Logo loaded from: {logo_path}")
-                        break
-        
-        # Fallback to text if logo not found
-        if not logo_loaded:
-            c.setFont("Helvetica-Bold", 14)
-            c.setFillColor(black)
-            c.drawString(config_mm['logo_x'] * mm, self.flip_y(config_mm['logo_y'] + 4, label_height), "CYIENT")
-            
-            c.setFillColor(blue)
-            c.drawString((config_mm['logo_x'] + 21) * mm, self.flip_y(config_mm['logo_y'] + 4, label_height), "DLM")
-        
-        # Get data from current excel data or use defaults
-        if self.current_excel_data:
-            pd_data = self.get_field_data(['P/D', 'PD', 'DESCRIPTION', 'DESC', 'PRODUCT']) or "SCB CCA"
-            pn_data = self.get_field_data(['P/N', 'PN', 'PART', 'CPN', 'PART_NUMBER']) or "CZ5S1000B"
-            pr_data = self.get_field_data(['P/R', 'PR', 'REVISION', 'REV', 'VERSION']) or "02"
-            sn_data = self.barcode_var.get().strip() if hasattr(self, 'barcode_var') and self.barcode_var.get().strip() else "CDL2349-1195"
-        else:
-            pd_data = "SCB CCA"
-            pn_data = "CZ5S1000B"
-            pr_data = "02"
-            sn_data = "CDL2349-1195"
-        
-        # 2. P/D field (text only, no barcode)
-        c.setFillColor(black)
-        c.setFont("Helvetica-Bold", 10)
-        pd_y = field_positions_mm['P/D']
-        c.drawString(config_mm['field_start_x'] * mm , self.flip_y(pd_y + 3, label_height), "P/D")
-        
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(pd_y + 3, label_height), pd_data)
-        
-        # 3. P/N field (with barcode)
-        c.setFont("Helvetica-Bold", 10)
-        pn_y = field_positions_mm['P/N']
-        c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
-        
-        # Draw P/N barcode
-        self.create_barcode_directly(c, pn_data, 
-                               (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                               self.flip_y(pn_y + config_mm['barcode_height'] + 1, label_height),
-                               config_mm['barcode_width'], config_mm['barcode_height'])
-        
-        # P/N text below barcode
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(pn_y + config_mm['barcode_height'] + 4, label_height), pn_data)
-        
-        # 4. P/R field (with barcode)
-        c.setFont("Helvetica-Bold", 10)
-        pr_y = field_positions_mm['P/R']
-        c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "P/R")
-        
-        # Draw P/R barcode
-        self.create_barcode_directly(c, pr_data, 
-                               (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                               self.flip_y(pr_y + config_mm['barcode_height'] + 1, label_height),
-                               config_mm['barcode_width'], config_mm['barcode_height'])
-        
-        # P/R text below barcode
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(pr_y + config_mm['barcode_height'] + 4, label_height), pr_data)
-        
-        # 5. S/N field (with barcode)
-        c.setFont("Helvetica-Bold", 10)
-        sn_y = field_positions_mm['S/N']
-        c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
-        
-        # Draw S/N barcode
-        self.create_barcode_directly(c, sn_data, 
-                               (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                               self.flip_y(sn_y + config_mm['barcode_height'] + 1, label_height),
-                               config_mm['barcode_width'], config_mm['barcode_height'])
-        
-        # S/N text below barcode
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(sn_y + config_mm['barcode_height'] + 4, label_height), sn_data)
-        
-        # Save the PDF
-        c.save()
-        
-        print(f"PDF label saved: {filename}")
-        return filename
 
 if __name__ == "__main__":
     app = EnhancedBarcodeLabelApp()
