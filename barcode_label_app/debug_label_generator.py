@@ -1,12 +1,66 @@
 #!/usr/bin/env python3
 """
-Debug Label Generator - Create exact label format as expected
-This script will help us perfect the label layout before applying to main app
+Debug Label Generator - Create exact label format as expected using direct PDF generation
+This script generates labels directly as PDF using reportlab for maximum print clarity
 """
 
-from PIL import Image, ImageDraw, ImageFont
+from reportlab.pdfgen import canvas
+from reportlab.lib.units import mm, inch
+from reportlab.lib.pagesizes import letter
+from reportlab.graphics.barcode import code128
+from reportlab.graphics import renderPDF
+from reportlab.graphics.shapes import Drawing
 import hashlib
 import os
+import platform
+
+def load_font(size):
+    """Load the best available font for the current system"""
+    system = platform.system()
+    
+    # Common font paths by OS
+    font_paths = []
+    
+    if system == "Windows":
+        font_paths = [
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/calibri.ttf",
+            "C:/Windows/Fonts/segoeui.ttf"
+        ]
+    elif system == "Darwin":  # macOS
+        font_paths = [
+            "/System/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Times.ttc"
+        ]
+    else:  # Linux and others
+        font_paths = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/TTF/arial.ttf",
+            "/usr/share/fonts/arial.ttf"
+        ]
+    
+    # Try each font path
+    for font_path in font_paths:
+        try:
+            if os.path.exists(font_path):
+                return ImageFont.truetype(font_path, size)
+        except:
+            continue
+    
+    # Try generic font names
+    generic_fonts = ["arial.ttf", "Arial.ttf", "helvetica.ttf", "Helvetica.ttf"]
+    for font_name in generic_fonts:
+        try:
+            return ImageFont.truetype(font_name, size)
+        except:
+            continue
+    
+    # Fall back to default font
+    print(f"Warning: Could not load any system fonts, using default font for size {size}")
+    return ImageFont.load_default()
 
 def generate_simple_barcode(data, width=280, height=30):
     """Generate a simple barcode pattern with proper bars"""
@@ -75,107 +129,6 @@ def generate_simple_barcode(data, width=280, height=30):
     
     return img
 
-def create_debug_label():
-    """Create debug label to match expected format exactly"""
-    
-    # Test different configurations
-    configs = [
-        {
-            'name': 'Config1_Compact',
-            'width': 489,
-            'height': 180,
-            'logo_x': 15, 'logo_y': 10,
-            'pd_x': 200, 'pd_y': 10,
-            'pn_x': 200, 'pn_y': 30,
-            'pr_x': 200, 'pr_y': 70,
-            'sn_x': 200, 'sn_y': 110,
-            'barcode_width': 250, 'barcode_height': 25
-        },
-        {
-            'name': 'Config2_MoreCompact',
-            'width': 489,
-            'height': 160,
-            'logo_x': 15, 'logo_y': 5,
-            'pd_x': 180, 'pd_y': 5,
-            'pn_x': 180, 'pn_y': 25,
-            'pr_x': 180, 'pr_y': 60,
-            'sn_x': 180, 'sn_y': 95,
-            'barcode_width': 270, 'barcode_height': 25
-        },
-        {
-            'name': 'Config3_Expected',
-            'width': 489,
-            'height': 150,
-            'logo_x': 15, 'logo_y': 5,
-            'pd_x': 170, 'pd_y': 10,
-            'pn_x': 170, 'pn_y': 30,
-            'pr_x': 170, 'pr_y': 65,
-            'sn_x': 170, 'sn_y': 100,
-            'barcode_width': 280, 'barcode_height': 25
-        }
-    ]
-    
-    for config in configs:
-        print(f"Generating {config['name']}...")
-        
-        # Create image
-        img = Image.new('RGB', (config['width'], config['height']), 'white')
-        draw = ImageDraw.Draw(img)
-        
-        # Load fonts
-        try:
-            font_company = ImageFont.truetype("arial.ttf", 14)
-            font_label = ImageFont.truetype("arial.ttf", 10)
-            font_data = ImageFont.truetype("arial.ttf", 9)
-        except:
-            font_company = ImageFont.load_default()
-            font_label = font_company
-            font_data = font_company
-        
-        # Draw border
-        draw.rectangle([0, 0, config['width']-1, config['height']-1], outline='black', width=1)
-        
-        # 1. Company logo/text area
-        draw.text((config['logo_x'], config['logo_y']), "CYIENT", fill='black', font=font_company)
-        draw.text((config['logo_x'] + 60, config['logo_y']), "DLM", fill='blue', font=font_company)
-        
-        # 2. P/D field (NO BARCODE - text only)
-        draw.text((config['pd_x'], config['pd_y']), "P/D", fill='black', font=font_label)
-        draw.text((config['pd_x'] + 30, config['pd_y']), "SCB CCA", fill='black', font=font_data)
-        
-        # 3. P/N field (with barcode)
-        draw.text((config['pn_x'], config['pn_y']), "P/N", fill='black', font=font_label)
-        pn_barcode = generate_simple_barcode("CZ5S1000B", config['barcode_width'], config['barcode_height'])
-        img.paste(pn_barcode, (config['pn_x'] + 30, config['pn_y'] + 2))
-        draw.text((config['pn_x'] + 30, config['pn_y'] + config['barcode_height'] + 4), "CZ5S1000B", fill='black', font=font_data)
-        
-        # 4. P/R field (with barcode)
-        draw.text((config['pr_x'], config['pr_y']), "P/R", fill='black', font=font_label)
-        pr_barcode = generate_simple_barcode("02", config['barcode_width'], config['barcode_height'])
-        img.paste(pr_barcode, (config['pr_x'] + 30, config['pr_y'] + 2))
-        draw.text((config['pr_x'] + 30, config['pr_y'] + config['barcode_height'] + 4), "02", fill='black', font=font_data)
-        
-        # 5. S/N field (with barcode)
-        draw.text((config['sn_x'], config['sn_y']), "S/N", fill='black', font=font_label)
-        sn_barcode = generate_simple_barcode("CDL2349-1195", config['barcode_width'], config['barcode_height'])
-        img.paste(sn_barcode, (config['sn_x'] + 30, config['sn_y'] + 2))
-        draw.text((config['sn_x'] + 30, config['sn_y'] + config['barcode_height'] + 4), "CDL2349-1195", fill='black', font=font_data)
-        
-        # Save the debug label
-        filename = f"debug_label_{config['name']}.png"
-        img.save(filename, 'PNG', dpi=(300, 300))
-        print(f"Saved: {filename}")
-        
-        # Print config for easy copying
-        print(f"Config {config['name']}:")
-        print(f"  Width: {config['width']}, Height: {config['height']}")
-        print(f"  P/D: ({config['pd_x']}, {config['pd_y']})")
-        print(f"  P/N: ({config['pn_x']}, {config['pn_y']})")
-        print(f"  P/R: ({config['pr_x']}, {config['pr_y']})")
-        print(f"  S/N: ({config['sn_x']}, {config['sn_y']})")
-        print(f"  Barcode: {config['barcode_width']}x{config['barcode_height']}")
-        print()
-
 
 
 def create_perfect_alignment_label():
@@ -189,18 +142,18 @@ def create_perfect_alignment_label():
         'height': 170,
         'logo_x': 15, 'logo_y': 5,
         'field_start_x': 110,
-        'barcode_width': 300, 
-        'barcode_height': 20,
+        'barcode_width': 280, 
+        'barcode_height': 35,  # Increased from 20 to 35
         'text_offset': 25,
         'field_vertical_gap': 15
     }
     
-    # Manual positioning for perfect alignment
+    # Manual positioning for perfect alignment (adjusted for larger barcode height)
     field_positions = {
         'P/D': 20,   # Start position
         'P/N': 40,   # P/D + 15 gap
-        'P/R': 80,   # P/N + barcode block (20 height + 3 text gap + 10 text + 2 spacing) + 15 gap
-        'S/N': 120   # P/R + barcode block + 15 gap
+        'P/R': 90,   # P/N + barcode block (35 height + 3 text gap + 10 text + 2 spacing) + 15 gap
+        'S/N': 140   # P/R + barcode block + 15 gap
     }
     
     # Create image
@@ -208,14 +161,9 @@ def create_perfect_alignment_label():
     draw = ImageDraw.Draw(img)
     
     # Load fonts
-    try:
-        font_company = ImageFont.truetype("arial.ttf", 14)
-        font_label = ImageFont.truetype("arial.ttf", 10)
-        font_data = ImageFont.truetype("arial.ttf", 8)
-    except:
-        font_company = ImageFont.load_default()
-        font_label = font_company
-        font_data = font_company
+    font_company = load_font(14)
+    font_label = load_font(10)
+    font_data = load_font(8)
     
     # Draw border
     draw.rectangle([0, 0, config['width']-1, config['height']-1], outline='black', width=1)
@@ -256,10 +204,21 @@ def create_perfect_alignment_label():
     data_text_y = barcode_y + config['barcode_height'] + 3
     draw.text((config['field_start_x'] + config['text_offset'], data_text_y), "CDL2349-1195", fill='black', font=font_data)
     
-    # Save the perfect alignment label
-    filename = "debug_label_PERFECT.png"
-    img.save(filename, 'PNG', dpi=(300, 300))
+    # Save the perfect alignment label as PDF
+    filename = "debug_label_PERFECT.pdf"
+    
+    # Convert to RGB if needed for PDF output
+    if img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    # Save as PDF with high resolution
+    img.save(filename, 'PDF', dpi=(300, 300), quality=95)
     print(f"Saved: {filename}")
+    
+    # Also save as PNG for quick preview
+    png_filename = "debug_label_PERFECT.png"
+    img.save(png_filename, 'PNG', dpi=(300, 300))
+    print(f"Also saved PNG preview: {png_filename}")
     
     # Return config for main app
     final_config = {
@@ -288,19 +247,14 @@ def create_perfect_alignment_label():
 if __name__ == "__main__":
     print("Debug Label Generator")
     print("====================")
-    
-    # Create multiple test configurations
-    create_debug_label()
 
-    
 
     print("Creating perfect alignment label...")
     
     # Create the perfect alignment version
     perfect_config = create_perfect_alignment_label()
     
-    print("\nDone! Check the generated PNG files:")
-    print("- debug_label_OPTIMIZED.png (manual spacing)")
-    print("- debug_label_DYNAMIC.png (calculated spacing)")
-    print("- debug_label_PERFECT.png (perfect alignment with field_vertical_gap=15)")
-    print("\nUse the config values from debug_label_PERFECT.png as it should have the best alignment.")
+    print("\nDone! Check the generated files:")
+    print("- debug_label_PERFECT.pdf (main output)")
+    print("- debug_label_PERFECT.png (preview)")
+    print("\nUse the config values from debug_label_PERFECT.pdf as it should have the best alignment.")
