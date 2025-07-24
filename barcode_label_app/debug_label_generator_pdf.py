@@ -11,7 +11,42 @@ from reportlab.graphics.barcode import code128
 from reportlab.graphics import renderPDF
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib.colors import black, blue
+from reportlab.lib.utils import ImageReader
+from PIL import Image
 import os
+
+def add_logo_to_canvas(canvas_obj, logo_path, x_mm, y_mm, width_mm, height_mm):
+    """Add a logo image to the canvas at the specified position and size"""
+    try:
+        # Check if logo file exists
+        if not os.path.exists(logo_path):
+            print(f"Warning: Logo file not found at {logo_path}")
+            return False
+        
+        # Convert mm to points
+        x_pts = x_mm * mm
+        y_pts = y_mm * mm
+        width_pts = width_mm * mm
+        height_pts = height_mm * mm
+        
+        # Load and draw the image
+        canvas_obj.drawImage(logo_path, x_pts, y_pts, width_pts, height_pts)
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error loading logo from {logo_path}: {e}")
+        # Draw a placeholder rectangle if logo fails to load
+        canvas_obj.setStrokeColor(black)
+        canvas_obj.setFillColor("lightgray")
+        canvas_obj.rect(x_mm * mm, y_mm * mm, width_mm * mm, height_mm * mm, fill=1, stroke=1)
+        
+        # Add text placeholder
+        canvas_obj.setFillColor(black)
+        canvas_obj.setFont("Helvetica", 8)
+        canvas_obj.drawString((x_mm + 2) * mm, (y_mm + height_mm/2) * mm, "LOGO")
+        
+        return False
 
 def create_barcode_directly(canvas_obj, data, x, y, width_mm, height_mm):
     """Create a barcode directly on the canvas using reportlab's built-in Code128 barcode"""
@@ -84,9 +119,11 @@ def create_perfect_pdf_label():
     config_mm = {
         'logo_x': 5,     # 15px ≈ 5.3mm
         'logo_y': 2,     # 5px ≈ 1.8mm  
-        'field_start_x': 65,  # 110px ≈ 38.9mm
+        'logo_width': 35,  # Logo width
+        'logo_height': 17, # Logo height
+        'field_start_x': 45,  # 110px ≈ 38.9mm
         'text_offset': 15,     # 25px ≈ 8.8mm
-        'barcode_width': 70,  # 280px ≈ 98.8mm
+        'barcode_width': 90,  # 280px ≈ 98.8mm
         'barcode_height': 8, # 35px ≈ 12.3mm
         'field_gap': 5.3,     # 15px ≈ 5.3mm
         'text_bc_offset': 0,  # 25px ≈ 8.8mm
@@ -118,13 +155,39 @@ def create_perfect_pdf_label():
     c.setLineWidth(0.5)
     c.rect(0, 0, label_width, label_height)
     
-    # 1. Company logo/text area
-    c.setFont("Helvetica-Bold", 14)
-    c.setFillColor(black)
-    c.drawString(config_mm['logo_x'] * mm, flip_y(config_mm['logo_y'] + 4), "CYIENT")
+    # 1. Company logo area
+    # Try to load logo from different possible locations
+    logo_paths = [
+        "logo.png",  # Current directory
+        "assets/logo.png",  # Assets folder
+        "../logo.png",  # Parent directory
+        "assets/logo copy.png"  # Alternative logo
+    ]
     
-    c.setFillColor(blue)
-    c.drawString((config_mm['logo_x'] + 21) * mm, flip_y(config_mm['logo_y'] + 4), "DLM")
+    logo_loaded = False
+    for logo_path in logo_paths:
+        if os.path.exists(logo_path):
+            logo_loaded = add_logo_to_canvas(c, logo_path, 
+                                           config_mm['logo_x'], 
+                                           flip_y(config_mm['logo_y'] + config_mm['logo_height']) / mm,  # Convert back to mm
+                                           config_mm['logo_width'], 
+                                           config_mm['logo_height'])
+            if logo_loaded:
+                print(f"Logo loaded from: {logo_path}")
+                break
+    
+    # Fallback to text if logo not found
+    if not logo_loaded:
+        c.setFont("Helvetica-Bold", 14)
+        c.setFillColor(black)
+        c.drawString(config_mm['logo_x'] * mm, flip_y(config_mm['logo_y'] + 4), "CYIENT")
+        
+        c.setFillColor(blue)
+        c.drawString((config_mm['logo_x'] + 21) * mm, flip_y(config_mm['logo_y'] + 4), "DLM")
+    
+    # Add logo image (uncomment to use)
+    # logo_path = "path/to/your/logo.png"
+    # add_logo_to_canvas(c, logo_path, config_mm['logo_x'], config_mm['logo_y'], 50, 20)
     
     # 2. P/D field (text only, no barcode)
     c.setFillColor(black)
@@ -217,138 +280,6 @@ def create_perfect_pdf_label():
     
     return final_config
 
-def create_multiple_test_labels():
-    """Create multiple test labels to fine-tune spacing and barcode size"""
-    
-    print("\nCreating test labels with different barcode sizes...")
-    
-    # Test different barcode heights
-    test_heights = [8, 10, 12, 15]  # in mm
-    
-    for height_mm in test_heights:
-        filename = f"debug_label_test_height_{height_mm}mm.pdf"
-        
-        # Label dimensions
-        label_width = 173 * mm
-        label_height = 60 * mm
-        
-        c = canvas.Canvas(filename, pagesize=(label_width, label_height))
-        
-        def flip_y(y_mm):
-            return label_height - (y_mm * mm)
-        
-        # Draw border
-        c.setStrokeColor(black)
-        c.setLineWidth(0.5)
-        c.rect(0, 0, label_width, label_height)
-        
-        # Title
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(5 * mm, flip_y(2), f"Test: Barcode Height {height_mm}mm")
-        
-        # Test barcode with different height
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(39 * mm, flip_y(15), "P/N")
-        
-        # Create barcode with test height
-        create_barcode_directly(c, "CZ5S1000B", 48 * mm, flip_y(15 + height_mm), 99, height_mm)
-        
-        c.setFont("Helvetica", 8)
-        c.drawString(48 * mm, flip_y(15 + height_mm + 3), "CZ5S1000B")
-        
-        c.save()
-        print(f"Created: {filename}")
-
-def create_barcode_width_tests():
-    """Create test labels with different barcode widths to demonstrate the effect"""
-    
-    print("\nCreating barcode width tests...")
-    
-    # Test different barcode widths in mm
-    test_widths = [60, 80, 100, 120, 140]  # Different widths in mm
-    
-    for width_mm in test_widths:
-        filename = f"debug_label_width_test_{width_mm}mm.pdf"
-        
-        # Label dimensions
-        label_width = 173 * mm
-        label_height = 60 * mm
-        
-        c = canvas.Canvas(filename, pagesize=(label_width, label_height))
-        
-        def flip_y(y_mm):
-            return label_height - (y_mm * mm)
-        
-        # Draw border
-        c.setStrokeColor(black)
-        c.setLineWidth(0.5)
-        c.rect(0, 0, label_width, label_height)
-        
-        # Title
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(5 * mm, flip_y(3), f"Test: Barcode Width {width_mm}mm")
-        
-        # Test barcode with different width
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(5 * mm, flip_y(15), "P/N")
-        
-        # Create barcode with test width
-        create_barcode_directly(c, "CZ5S1000B", 25 * mm, flip_y(25), width_mm, 10)
-        
-        c.setFont("Helvetica", 8)
-        c.drawString(25 * mm, flip_y(28), "CZ5S1000B")
-        
-        # Also test with longer data
-        c.setFont("Helvetica-Bold", 10)
-        c.drawString(5 * mm, flip_y(40), "S/N")
-        
-        create_barcode_directly(c, "CDL2349-1195-EXTENDED", 25 * mm, flip_y(50), width_mm, 10)
-        
-        c.setFont("Helvetica", 8)
-        c.drawString(25 * mm, flip_y(53), "CDL2349-1195-EXTENDED")
-        
-        c.save()
-        print(f"Created: {filename}")
-
-def create_barcode_start_test():
-    """Create a test PDF to verify that barcodes always start with a black bar"""
-    filename = "debug_barcode_start_test.pdf"
-    
-    # Create PDF with letter size
-    c = canvas.Canvas(filename, pagesize=letter)
-    
-    # Test various data strings to ensure they all start with black bars
-    test_data = [
-        "A",
-        "1", 
-        "CZ5S1000B",
-        "02",
-        "CDL2349-1195",
-        "HELLO",
-        "12345",
-        "ABC123"
-    ]
-    
-    y_pos = 250
-    
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(50, y_pos + 20, "Code128 Barcode Start Test - All should start with BLACK bar")
-    
-    for i, data in enumerate(test_data):
-        c.setFont("Helvetica", 10)
-        c.drawString(50, y_pos, f"Data: '{data}'")
-        
-        # Create barcode - should always start with black bar per Code128 spec
-        create_barcode_directly(c, data, 150, y_pos - 5, 60, 8)
-        
-        # Add note about first bar
-        c.setFont("Helvetica", 8)
-        c.drawString(220, y_pos, "← First bar should be BLACK")
-        
-        y_pos -= 25
-    
-    c.save()
-    print(f"Created barcode start test: {filename}")
 
 if __name__ == "__main__":
     print("Debug Label Generator - Direct PDF Output")
@@ -357,21 +288,11 @@ if __name__ == "__main__":
     # Create the main perfect PDF label
     perfect_config = create_perfect_pdf_label()
     
-    # Create test labels with different barcode heights
-    create_multiple_test_labels()
-    
-    # Create test labels with different barcode widths
-    create_barcode_width_tests()
-    
-    # Test barcode start with black bar
-    create_barcode_start_test()
-    
+ 
     print("\nDone! Generated files:")
-    print("- debug_label_PERFECT_direct.pdf (main output)")
-    print("- debug_label_test_height_*.pdf (barcode height tests)")
-    print("- debug_label_width_test_*.pdf (barcode width tests)")
-    print("- debug_barcode_start_test.pdf (verify first bar is black)")
+    print("- debug_label_PERFECT_direct.pdf (main output with logo)")
+    print("- debug_logo_test_*.pdf (logo size tests)")
     print("\nThe PDF files will have maximum print clarity!")
-    print("Open the width test files to see how barcode width changes.")
-    print("The start test file verifies that all barcodes begin with a black bar per Code128 spec.")
-    print("You can adjust the 'barcode_width' value in the config to get the desired width.")
+    print("Check the logo test files to find the best logo size.")
+    print("You can adjust the 'logo_width' and 'logo_height' values in the config.")
+    print("Logo will be loaded from: logo.png, assets/logo.png, or fallback to text.")
