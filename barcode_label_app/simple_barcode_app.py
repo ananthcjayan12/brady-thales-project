@@ -15,7 +15,7 @@ import qrcode
 import os
 import json
 from datetime import datetime
-import win32print, win32ui, win32con
+# import win32print, win32ui, win32con
 from PIL import Image, ImageDraw, ImageWin
 
 class EnhancedBarcodeLabelApp:
@@ -43,7 +43,7 @@ class EnhancedBarcodeLabelApp:
         # Default label settings - 83mm x 32mm label (489px x 189px at 150 DPI)
         self.default_settings = {
             'width': 489,  # 83mm at 150 DPI
-            'height': 189, # 32mm at 150 DPI
+            'height': 220, # Optimized height for barcode layout
             'logo_path': self.get_default_logo_path(),
             'logo_x': 15,
             'logo_y': 5,
@@ -52,13 +52,18 @@ class EnhancedBarcodeLabelApp:
             'pd_x': 190,    # P/D field position
             'pd_y': 5,
             'pn_x': 190,    # P/N field position  
-            'pn_y': 45,
+            'pn_y': 35,     # Compact spacing
             'pr_x': 190,    # P/R field position
-            'pr_y': 85,
+            'pr_y': 70,     # Compact spacing
             'sn_x': 190,    # S/N field position
-            'sn_y': 125,
-            'barcode_width': 280,
-            'barcode_height': 25
+            'sn_y': 105,    # Compact spacing for proper fit
+            'barcode_width': 280,    # Good size for clarity
+            'barcode_height': 30,    # Good height for clarity
+            # Font sizes for different text elements
+            'font_company_size': 14,     # For company name/logo text
+            'font_label_size': 10,       # For P/D, P/N, P/R, S/N labels
+            'font_data_size': 9,         # For data text below barcodes
+            'font_dlm_size': 8           # For DLM text
         }
         
         # Load settings from file or use defaults
@@ -169,6 +174,14 @@ class EnhancedBarcodeLabelApp:
             self.pr_y_var.set(self.label_settings['pr_y'])
             self.sn_x_var.set(self.label_settings['sn_x'])
             self.sn_y_var.set(self.label_settings['sn_y'])
+            self.barcode_width_var.set(self.label_settings['barcode_width'])
+            self.barcode_height_var.set(self.label_settings['barcode_height'])
+            
+            # Update font size controls
+            self.font_company_size_var.set(self.label_settings.get('font_company_size', 14))
+            self.font_label_size_var.set(self.label_settings.get('font_label_size', 10))
+            self.font_data_size_var.set(self.label_settings.get('font_data_size', 9))
+            self.font_dlm_size_var.set(self.label_settings.get('font_dlm_size', 8))
             
             # Update logo path
             logo_path = self.label_settings.get('logo_path')
@@ -357,7 +370,7 @@ class EnhancedBarcodeLabelApp:
 
         ttk.Label(dims_frame, text="Height:").grid(row=1, column=0, sticky=tk.W)
         self.height_var = tk.IntVar(value=self.label_settings['height'])
-        ttk.Scale(dims_frame, from_=100, to=300, variable=self.height_var,
+        ttk.Scale(dims_frame, from_=150, to=350, variable=self.height_var,
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW)
         ttk.Label(dims_frame, textvariable=self.height_var).grid(row=1, column=2)
 
@@ -386,7 +399,7 @@ class EnhancedBarcodeLabelApp:
 
         ttk.Label(pos_frame, text="P/D Y:").grid(row=3, column=0, sticky=tk.W)
         self.pd_y_var = tk.IntVar(value=self.label_settings['pd_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pd_y_var,
+        ttk.Scale(pos_frame, from_=0, to=250, variable=self.pd_y_var,
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=3, column=1, sticky=tk.EW)
 
         # P/N position
@@ -397,7 +410,7 @@ class EnhancedBarcodeLabelApp:
 
         ttk.Label(pos_frame, text="P/N Y:").grid(row=5, column=0, sticky=tk.W)
         self.pn_y_var = tk.IntVar(value=self.label_settings['pn_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pn_y_var,
+        ttk.Scale(pos_frame, from_=0, to=250, variable=self.pn_y_var,
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=5, column=1, sticky=tk.EW)
 
         # P/R position
@@ -408,7 +421,7 @@ class EnhancedBarcodeLabelApp:
 
         ttk.Label(pos_frame, text="P/R Y:").grid(row=7, column=0, sticky=tk.W)
         self.pr_y_var = tk.IntVar(value=self.label_settings['pr_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.pr_y_var,
+        ttk.Scale(pos_frame, from_=0, to=250, variable=self.pr_y_var,
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=7, column=1, sticky=tk.EW)
 
         # S/N position
@@ -419,7 +432,7 @@ class EnhancedBarcodeLabelApp:
 
         ttk.Label(pos_frame, text="S/N Y:").grid(row=9, column=0, sticky=tk.W)
         self.sn_y_var = tk.IntVar(value=self.label_settings['sn_y'])
-        ttk.Scale(pos_frame, from_=0, to=180, variable=self.sn_y_var,
+        ttk.Scale(pos_frame, from_=0, to=250, variable=self.sn_y_var,
                  orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=9, column=1, sticky=tk.EW)
 
         pos_frame.columnconfigure(1, weight=1)
@@ -450,6 +463,54 @@ class EnhancedBarcodeLabelApp:
         ttk.Label(logo_frame, textvariable=self.logo_height_var).grid(row=2, column=3)
 
         logo_frame.columnconfigure(1, weight=1)
+
+        # Barcode settings - more compact
+        barcode_frame = ttk.LabelFrame(scrollable_frame, text="Barcode", padding="3")
+        barcode_frame.pack(fill=tk.X, pady=(0, 3))
+
+        ttk.Label(barcode_frame, text="Barcode Width:").grid(row=0, column=0, sticky=tk.W)
+        self.barcode_width_var = tk.IntVar(value=self.label_settings['barcode_width'])
+        ttk.Scale(barcode_frame, from_=200, to=450, variable=self.barcode_width_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(barcode_frame, textvariable=self.barcode_width_var).grid(row=0, column=3)
+
+        ttk.Label(barcode_frame, text="Barcode Height:").grid(row=1, column=0, sticky=tk.W)
+        self.barcode_height_var = tk.IntVar(value=self.label_settings['barcode_height'])
+        ttk.Scale(barcode_frame, from_=15, to=60, variable=self.barcode_height_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(barcode_frame, textvariable=self.barcode_height_var).grid(row=1, column=3)
+
+        barcode_frame.columnconfigure(1, weight=1)
+
+        # Font size settings - more compact
+        font_frame = ttk.LabelFrame(scrollable_frame, text="Font Sizes", padding="3")
+        font_frame.pack(fill=tk.X, pady=(0, 3))
+
+        ttk.Label(font_frame, text="Company Font:").grid(row=0, column=0, sticky=tk.W)
+        self.font_company_size_var = tk.IntVar(value=self.label_settings.get('font_company_size', 14))
+        ttk.Scale(font_frame, from_=8, to=24, variable=self.font_company_size_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=0, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(font_frame, textvariable=self.font_company_size_var).grid(row=0, column=3)
+
+        ttk.Label(font_frame, text="Label Font (P/D, P/N):").grid(row=1, column=0, sticky=tk.W)
+        self.font_label_size_var = tk.IntVar(value=self.label_settings.get('font_label_size', 10))
+        ttk.Scale(font_frame, from_=6, to=18, variable=self.font_label_size_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=1, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(font_frame, textvariable=self.font_label_size_var).grid(row=1, column=3)
+
+        ttk.Label(font_frame, text="Data Font:").grid(row=2, column=0, sticky=tk.W)
+        self.font_data_size_var = tk.IntVar(value=self.label_settings.get('font_data_size', 9))
+        ttk.Scale(font_frame, from_=6, to=16, variable=self.font_data_size_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=2, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(font_frame, textvariable=self.font_data_size_var).grid(row=2, column=3)
+
+        ttk.Label(font_frame, text="DLM Font:").grid(row=3, column=0, sticky=tk.W)
+        self.font_dlm_size_var = tk.IntVar(value=self.label_settings.get('font_dlm_size', 8))
+        ttk.Scale(font_frame, from_=5, to=14, variable=self.font_dlm_size_var,
+                 orient=tk.HORIZONTAL, command=self.on_setting_change).grid(row=3, column=1, sticky=tk.EW, columnspan=2)
+        ttk.Label(font_frame, textvariable=self.font_dlm_size_var).grid(row=3, column=3)
+
+        font_frame.columnconfigure(1, weight=1)
 
         canvas.pack(side='left', fill='both', expand=True)
         scrollbar_ctrl.pack(side='right', fill='y')
@@ -495,7 +556,13 @@ class EnhancedBarcodeLabelApp:
             'pr_x': self.pr_x_var.get(),
             'pr_y': self.pr_y_var.get(),
             'sn_x': self.sn_x_var.get(),
-            'sn_y': self.sn_y_var.get()
+            'sn_y': self.sn_y_var.get(),
+            'barcode_width': self.barcode_width_var.get(),
+            'barcode_height': self.barcode_height_var.get(),
+            'font_company_size': self.font_company_size_var.get(),
+            'font_label_size': self.font_label_size_var.get(),
+            'font_data_size': self.font_data_size_var.get(),
+            'font_dlm_size': self.font_dlm_size_var.get()
         })
     
     def browse_logo(self):
@@ -612,66 +679,140 @@ class EnhancedBarcodeLabelApp:
         self.barcode_var.set("")
         self.barcode_entry.focus()
     
-    def generate_barcode(self, data, width=280, height=25):
-        """Generate a clean Code128 barcode using treepoem (no text)"""
-        # Attempt using treepoem only if Ghostscript is available
+    def generate_barcode(self, data, width=350, height=35):
+        """Generate a clean Code128 barcode with multiple fallback options"""
+        
+        # First, try treepoem if available
         try:
             import shutil
             # Check for Ghostscript executable
-            if not (shutil.which('gs') or shutil.which('gswin64c')):
-                raise ImportError('Ghostscript not found')
-            import treepoem
-            # Generate Code128 barcode
-            barcode_img = treepoem.generate_barcode(
-                barcode_type='code128',
-                data=data,
-                options={'includetext': False, 'height': 0.5, 'width': 0.02}
-            )
+            if shutil.which('gs') or shutil.which('gswin64c') or shutil.which('gswin32c'):
+                import treepoem
+                
+                # Generate Code128 barcode with improved options for clarity
+                barcode_img = treepoem.generate_barcode(
+                    barcode_type='code128',
+                    data=data,
+                    options={
+                        'includetext': False, 
+                        'height': 0.8,
+                        'width': 0.015,
+                        'textxalign': 'center'
+                    }
+                )
+                
+                if barcode_img.mode != 'RGB':
+                    barcode_img = barcode_img.convert('RGB')
+                    
+                # Resize for better quality
+                final_img = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
+                return final_img
+                
+        except Exception as e:
+            print(f"Treepoem barcode error: {e}")
+        
+        # Second, try python-barcode library
+        try:
+            from barcode import Code128
+            from barcode.writer import ImageWriter
+            import io
+            
+            # Create barcode with python-barcode
+            code = Code128(data, writer=ImageWriter())
+            buffer = io.BytesIO()
+            code.write(buffer, options={
+                'module_width': 0.3,
+                'module_height': 10,
+                'quiet_zone': 2,
+                'font_size': 0,  # No text
+                'text_distance': 0,
+                'background': 'white',
+                'foreground': 'black'
+            })
+            buffer.seek(0)
+            
+            barcode_img = Image.open(buffer)
             if barcode_img.mode != 'RGB':
                 barcode_img = barcode_img.convert('RGB')
-            return barcode_img.resize((width, height), Image.Resampling.LANCZOS)
+                
+            # Resize to target size
+            final_img = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
+            return final_img
+            
         except Exception as e:
-            # Fallback to simple barcode and report error
-            print(f"Barcode generator error: {e}")
-            self.status_var.set(f"Barcode error: {e}")
-            return self.generate_simple_barcode(data, width, height)
+            print(f"Python-barcode error: {e}")
+        
+        # Final fallback to simple pattern
+        print(f"Using simple barcode fallback for: {data}")
+        return self.generate_simple_barcode(data, width, height)
     
-    def generate_simple_barcode(self, data, width=280, height=25):
-        """Fallback: Generate a simple barcode pattern"""
+    def generate_simple_barcode(self, data, width=350, height=35):
+        """Fallback: Generate a simple barcode pattern with proper bars"""
         img = Image.new('RGB', (width, height), 'white')
         draw = ImageDraw.Draw(img)
         
         # Create Code128-like pattern manually
-        # This is a simplified pattern generator
         import hashlib
         
         # Use hash to create consistent pattern
         hash_val = hashlib.md5(data.encode()).hexdigest()
         
-        # Convert to pattern
-        bar_width = 2
-        x = 5  # Start with small margin
+        # Calculate bar dimensions for proper barcode appearance
+        margin = 10
+        usable_width = width - (2 * margin)
+        bar_count = min(len(data) * 6, usable_width // 2)  # Ensure we have enough bars
         
-        # Generate bars based on data
-        for i in range(0, len(hash_val), 2):
+        if bar_count == 0:
+            bar_count = 20  # Minimum bars
+            
+        narrow_bar = max(1, usable_width // (bar_count * 3))  # Narrow bar width
+        wide_bar = narrow_bar * 2  # Wide bar width
+        
+        x = margin
+        
+        # Create start pattern (typical for Code128)
+        start_pattern = [1, 1, 0, 1, 0, 1, 1, 0]  # Start B pattern
+        for bar in start_pattern:
+            bar_width = wide_bar if bar else narrow_bar
+            if bar:
+                draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
+            x += bar_width
+            if x >= width - margin:
+                break
+        
+        # Generate data bars based on hash
+        for i in range(0, min(len(hash_val), 20), 2):
+            if x >= width - margin - 20:  # Leave space for stop pattern
+                break
+                
             try:
                 hex_val = int(hash_val[i:i+2], 16)
                 
-                # Create pattern: each hex pair creates different bar patterns
+                # Create alternating bar pattern based on hex value
                 for bit in range(4):
-                    if hex_val & (1 << bit):
-                        # Draw black bar
+                    is_bar = (hex_val >> bit) & 1
+                    bar_width = wide_bar if (hex_val % 3 == 0) else narrow_bar
+                    
+                    if is_bar:
                         draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
                     x += bar_width
                     
-                    if x >= width - 10:  # Leave margin at end
+                    if x >= width - margin - 20:
                         break
-                
-                if x >= width - 10:
-                    break
-                    
+                        
             except (ValueError, IndexError):
                 continue
+        
+        # Add stop pattern
+        if x < width - margin:
+            stop_pattern = [1, 1, 0, 0, 1, 1, 1]  # Stop pattern
+            for bar in stop_pattern:
+                if x >= width - 5:
+                    break
+                bar_width = narrow_bar
+                if bar:
+                    draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
+                x += bar_width
         
         return img
     
@@ -685,12 +826,12 @@ class EnhancedBarcodeLabelApp:
         img = Image.new('RGB', (width, height), 'white')
         draw = ImageDraw.Draw(img)
         
-        # Load fonts
+        # Load fonts with sizes from settings
         try:
-            font_company = ImageFont.truetype("arial.ttf", 14)  # For CYIENT
-            font_label = ImageFont.truetype("arial.ttf", 10)    # For P/D, P/N, etc labels
-            font_data = ImageFont.truetype("arial.ttf", 9)      # For data text
-            font_dlm = ImageFont.truetype("arial.ttf", 8)       # For DLM
+            font_company = ImageFont.truetype("arial.ttf", settings.get('font_company_size', 14))
+            font_label = ImageFont.truetype("arial.ttf", settings.get('font_label_size', 10))
+            font_data = ImageFont.truetype("arial.ttf", settings.get('font_data_size', 9))
+            font_dlm = ImageFont.truetype("arial.ttf", settings.get('font_dlm_size', 8))
         except:
             font_company = ImageFont.load_default()
             font_label = font_company
@@ -737,14 +878,9 @@ class EnhancedBarcodeLabelApp:
             if not pn_data: pn_data = "CZ5S1000B"
             if not pr_data: pr_data = "02"
             
-            # 3. P/D field
+            # 3. P/D field (NO BARCODE - text only)
             draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-            pd_barcode = self.generate_barcode(pd_data, settings['barcode_width'], settings['barcode_height'])
-            if pd_barcode:
-                img.paste(pd_barcode, (settings['pd_x'] + 30, settings['pd_y'] + 2))
-            else:
-                draw.text((settings['pd_x'] + 30, settings['pd_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['pd_x'] + 30, settings['pd_y'] + 28), pd_data, fill='black', font=font_data)
+            draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
             
             # 4. P/N field
             draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
@@ -753,7 +889,7 @@ class EnhancedBarcodeLabelApp:
                 img.paste(pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
             else:
                 draw.text((settings['pn_x'] + 30, settings['pn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['pn_x'] + 30, settings['pn_y'] + 28), pn_data, fill='black', font=font_data)
+            draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 5), pn_data, fill='black', font=font_data)
             
             # 5. P/R field
             draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
@@ -762,7 +898,7 @@ class EnhancedBarcodeLabelApp:
                 img.paste(pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
             else:
                 draw.text((settings['pr_x'] + 30, settings['pr_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['pr_x'] + 30, settings['pr_y'] + 28), pr_data, fill='black', font=font_data)
+            draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 5), pr_data, fill='black', font=font_data)
             
             # 6. S/N field
             draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
@@ -771,35 +907,33 @@ class EnhancedBarcodeLabelApp:
                 img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
             else:
                 draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['sn_x'] + 30, settings['sn_y'] + 28), sn_data, fill='black', font=font_data)
+            draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
         
         else:
             # Sample data when no lookup performed
-            # Also generate sample barcodes for preview
-            sample_pd_barcode = self.generate_simple_barcode("SCB CCA", settings['barcode_width'], settings['barcode_height'])
+            # Generate sample barcodes for preview (excluding P/D)
             sample_pn_barcode = self.generate_simple_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
             sample_pr_barcode = self.generate_simple_barcode("02", settings['barcode_width'], settings['barcode_height'])
             sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
             
-            # P/D
+            # P/D (NO BARCODE - text only)
             draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-            img.paste(sample_pd_barcode, (settings['pd_x'] + 30, settings['pd_y'] + 2))
-            draw.text((settings['pd_x'] + 30, settings['pd_y'] + 28), "SCB CCA", fill='black', font=font_data)
+            draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
             
             # P/N
             draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-            img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
-            draw.text((settings['pn_x'] + 30, settings['pn_y'] + 28), "CZ5S1000B", fill='black', font=font_data)
+            img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y']))
+            draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 2), "CZ5S1000B", fill='black', font=font_data)
             
             # P/R
             draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
-            img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
-            draw.text((settings['pr_x'] + 30, settings['pr_y'] + 28), "02", fill='black', font=font_data)
+            img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y']))
+            draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 2), "02", fill='black', font=font_data)
             
             # S/N
             draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-            img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
-            draw.text((settings['sn_x'] + 30, settings['sn_y'] + 28), "CDL2349-1195", fill='black', font=font_data)
+            img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
+            draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
         
         return img
     
@@ -926,6 +1060,7 @@ class EnhancedBarcodeLabelApp:
     
     def print_label(self):
         """Print the current label using simple approach"""
+        pass
         if not self.current_label:
             messagebox.showwarning("Warning", "No label to print!")
             return
