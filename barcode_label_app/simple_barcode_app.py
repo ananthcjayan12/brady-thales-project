@@ -15,7 +15,7 @@ import qrcode
 import os
 import json
 from datetime import datetime
-# import win32print, win32ui, win32con
+import win32print, win32ui, win32con
 from PIL import Image, ImageDraw, ImageWin
 
 # PDF generation imports
@@ -690,142 +690,58 @@ class EnhancedBarcodeLabelApp:
         self.barcode_entry.focus()
     
     def generate_barcode(self, data, width=350, height=35):
-        """Generate a clean Code128 barcode with multiple fallback options"""
-        
-        # First, try treepoem if available
+        """Generate a clean Code128 barcode using ReportLab's built-in barcode - simple and reliable"""
         try:
-            import shutil
-            # Check for Ghostscript executable
-            if shutil.which('gs') or shutil.which('gswin64c') or shutil.which('gswin32c'):
-                import treepoem
-                
-                # Generate Code128 barcode with improved options for clarity
-                barcode_img = treepoem.generate_barcode(
-                    barcode_type='code128',
-                    data=data,
-                    options={
-                        'includetext': False, 
-                        'height': 0.8,
-                        'width': 0.015,
-                        'textxalign': 'center'
-                    }
-                )
-                
-                if barcode_img.mode != 'RGB':
-                    barcode_img = barcode_img.convert('RGB')
-                    
-                # Resize for better quality
-                final_img = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
-                return final_img
-                
-        except Exception as e:
-            print(f"Treepoem barcode error: {e}")
-        
-        # Second, try python-barcode library
-        try:
-            from barcode import Code128
-            from barcode.writer import ImageWriter
-            import io
+            from reportlab.graphics.barcode import code128
+            from reportlab.graphics.renderPM import drawToPIL
+            from reportlab.graphics.shapes import Drawing
+            from reportlab.lib.units import mm
             
-            # Create barcode with python-barcode
-            code = Code128(data, writer=ImageWriter())
-            buffer = io.BytesIO()
-            code.write(buffer, options={
-                'module_width': 0.3,
-                'module_height': 10,
-                'quiet_zone': 2,
-                'font_size': 0,  # No text
-                'text_distance': 0,
-                'background': 'white',
-                'foreground': 'black'
-            })
-            buffer.seek(0)
+            # Create a drawing with the barcode
+            drawing = Drawing(width, height)
             
-            barcode_img = Image.open(buffer)
-            if barcode_img.mode != 'RGB':
-                barcode_img = barcode_img.convert('RGB')
-                
-            # Resize to target size
-            final_img = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
-            return final_img
+            # Calculate bar width to fit the desired width
+            estimated_bars = len(data) * 11 + 35  # Rough estimate including start/stop/check
+            target_bar_width = width / estimated_bars
+            bar_width = max(0.5, target_bar_width)  # Minimum bar width for readability
+            
+            # Create the barcode with calculated bar width
+            barcode = code128.Code128(data, 
+                                     barWidth=bar_width,
+                                     barHeight=height,
+                                     humanReadable=False,  # We'll add text separately
+                                     quiet=0)  # No quiet zones - we control positioning
+            
+            # Get the actual width of the generated barcode and scale if needed
+            actual_width = barcode.width
+            if actual_width > 0 and actual_width != width:
+                scale_factor = width / actual_width
+                barcode = code128.Code128(data, 
+                                         barWidth=bar_width * scale_factor,
+                                         barHeight=height,
+                                         humanReadable=False,
+                                         quiet=0)
+            
+            # Add barcode to drawing
+            barcode.x = 0
+            barcode.y = 0
+            drawing.add(barcode)
+            
+            # Convert to PIL Image
+            pil_img = drawToPIL(drawing, fmt='RGB', dpi=150)
+            
+            # Ensure it's the right size
+            if pil_img.size != (width, height):
+                pil_img = pil_img.resize((width, height), Image.Resampling.LANCZOS)
+            
+            return pil_img
             
         except Exception as e:
-            print(f"Python-barcode error: {e}")
-        
-        # Final fallback to simple pattern
-        print(f"Using simple barcode fallback for: {data}")
-        return self.generate_simple_barcode(data, width, height)
-    
-    def generate_simple_barcode(self, data, width=350, height=35):
-        """Fallback: Generate a simple barcode pattern with proper bars"""
-        img = Image.new('RGB', (width, height), 'white')
-        draw = ImageDraw.Draw(img)
-        
-        # Create Code128-like pattern manually
-        import hashlib
-        
-        # Use hash to create consistent pattern
-        hash_val = hashlib.md5(data.encode()).hexdigest()
-        
-        # Calculate bar dimensions for proper barcode appearance
-        margin = 10
-        usable_width = width - (2 * margin)
-        bar_count = min(len(data) * 6, usable_width // 2)  # Ensure we have enough bars
-        
-        if bar_count == 0:
-            bar_count = 20  # Minimum bars
-            
-        narrow_bar = max(1, usable_width // (bar_count * 3))  # Narrow bar width
-        wide_bar = narrow_bar * 2  # Wide bar width
-        
-        x = margin
-        
-        # Create start pattern (typical for Code128)
-        start_pattern = [1, 1, 0, 1, 0, 1, 1, 0]  # Start B pattern
-        for bar in start_pattern:
-            bar_width = wide_bar if bar else narrow_bar
-            if bar:
-                draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
-            x += bar_width
-            if x >= width - margin:
-                break
-        
-        # Generate data bars based on hash
-        for i in range(0, min(len(hash_val), 20), 2):
-            if x >= width - margin - 20:  # Leave space for stop pattern
-                break
-                
-            try:
-                hex_val = int(hash_val[i:i+2], 16)
-                
-                # Create alternating bar pattern based on hex value
-                for bit in range(4):
-                    is_bar = (hex_val >> bit) & 1
-                    bar_width = wide_bar if (hex_val % 3 == 0) else narrow_bar
-                    
-                    if is_bar:
-                        draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
-                    x += bar_width
-                    
-                    if x >= width - margin - 20:
-                        break
-                        
-            except (ValueError, IndexError):
-                continue
-        
-        # Add stop pattern
-        if x < width - margin:
-            stop_pattern = [1, 1, 0, 0, 1, 1, 1]  # Stop pattern
-            for bar in stop_pattern:
-                if x >= width - 5:
-                    break
-                bar_width = narrow_bar
-                if bar:
-                    draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
-                x += bar_width
-        
-        return img
-    
+            print(f"ReportLab barcode error: {e}")
+            # Fall back to simple pattern if ReportLab fails
+            return self.generate_simple_barcode(data, width, height)
+
+
     def generate_label_image(self):
         """Generate 83mm x 32mm label with P/D, P/N, P/R, S/N fields"""
         settings = self.label_settings
@@ -1074,40 +990,220 @@ class EnhancedBarcodeLabelApp:
             messagebox.showerror("Error", f"Error saving label: {e}")
             print(f"Save error: {e}")  # For debugging
     
+    def print_pdf_as_image(self, pdf_path):
+        """Convert PDF to image and print using the exact same method as samplepdfprint.py"""
+        try:
+            # Convert PDF to image first
+            try:
+                import fitz  # PyMuPDF
+                # Open PDF and convert first page to image
+                pdf_document = fitz.open(pdf_path)
+                page = pdf_document[0]
+                # Render page as image with high DPI for printing
+                mat = fitz.Matrix(3.0, 3.0)  # 3x zoom for better quality
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("ppm")
+                
+                # Create PIL Image from the data
+                from io import BytesIO
+                img = Image.open(BytesIO(img_data))
+                pdf_document.close()
+                
+            except ImportError:
+                # PyMuPDF not available, try using pdf2image
+                try:
+                    from pdf2image import convert_from_path
+                    images = convert_from_path(pdf_path, dpi=300, first_page=1, last_page=1)
+                    img = images[0]
+                except ImportError:
+                    return False  # No PDF conversion libraries available
+            
+            # Now print the image using the exact same method as samplepdfprint.py
+            printer_name = win32print.GetDefaultPrinter()
+            print(f"Printing to: {printer_name}")
+            
+            hDC = win32ui.CreateDC()
+            hDC.CreatePrinterDC(printer_name)
+            
+            # Get printable area
+            printable_area = (hDC.GetDeviceCaps(win32con.HORZRES),
+                            hDC.GetDeviceCaps(win32con.VERTRES))
+            
+            # Calculate scaling to fit printable area
+            ratio = min(printable_area[0] / img.size[0], printable_area[1] / img.size[1])
+            scaled_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            
+            # Resize image
+            bmp = img.resize(scaled_size)
+            dib = ImageWin.Dib(bmp)
+            
+            # Print the image
+            hDC.StartDoc("Label Print")
+            hDC.StartPage()
+            
+            # Center the image on the page
+            x = (printable_area[0] - scaled_size[0]) // 2
+            y = (printable_area[1] - scaled_size[1]) // 2
+            
+            dib.draw(hDC.GetHandleOutput(), (x, y, x + scaled_size[0], y + scaled_size[1]))
+            
+            hDC.EndPage()
+            hDC.EndDoc()
+            hDC.DeleteDC()
+            
+            return True
+            
+        except Exception as e:
+            print(f"PDF to image print error: {e}")
+            return False
+
+    def print_pdf_directly(self, pdf_path):
+        """Convert PDF to image and print directly using win32print - exactly like samplepdfprint.py"""
+        try:
+            import os
+            import tempfile
+            
+            # Convert relative path to absolute path
+            abs_pdf_path = os.path.abspath(pdf_path)
+            
+            # Check if file exists
+            if not os.path.exists(abs_pdf_path):
+                print(f"PDF file not found: {abs_pdf_path}")
+                return False
+            
+            print(f"Converting PDF to image for direct printing: {abs_pdf_path}")
+            
+            # Convert PDF to image first - try PyMuPDF first (doesn't need Poppler)
+            try:
+                # Try PyMuPDF first (more reliable on Windows, no external dependencies)
+                import fitz
+                pdf_document = fitz.open(abs_pdf_path)
+                page = pdf_document[0]
+                # Render page as image with high DPI for printing
+                mat = fitz.Matrix(3.0, 3.0)  # 3x zoom for better quality
+                pix = page.get_pixmap(matrix=mat)
+                img_data = pix.tobytes("ppm")
+                
+                # Create PIL Image from the data
+                from io import BytesIO
+                img = Image.open(BytesIO(img_data))
+                pdf_document.close()
+                print("PDF converted to image using PyMuPDF")
+                
+                # Save the original converted image for verification
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                original_img_path = f"output_labels/printer_image_original_{timestamp}.png"
+                img.save(original_img_path, 'PNG', dpi=(300, 300))
+                print(f"Original printer image saved: {original_img_path}")
+                
+            except ImportError:
+                try:
+                    # Fallback: try pdf2image (requires Poppler)
+                    from pdf2image import convert_from_path
+                    images = convert_from_path(abs_pdf_path, dpi=300, first_page=1, last_page=1)
+                    img = images[0]
+                    print("PDF converted to image using pdf2image")
+                    
+                    # Save the original converted image for verification
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    original_img_path = f"output_labels/printer_image_original_{timestamp}.png"
+                    img.save(original_img_path, 'PNG', dpi=(300, 300))
+                    print(f"Original printer image saved: {original_img_path}")
+                    
+                except Exception as e:
+                    print(f"pdf2image error (likely missing Poppler): {e}")
+                    print("No PDF conversion libraries available or working")
+                    return False
+            except Exception as e:
+                print(f"PyMuPDF error: {e}")
+                try:
+                    # Fallback: try pdf2image (requires Poppler)
+                    from pdf2image import convert_from_path
+                    images = convert_from_path(abs_pdf_path, dpi=300, first_page=1, last_page=1)
+                    img = images[0]
+                    print("PDF converted to image using pdf2image (fallback)")
+                    
+                    # Save the original converted image for verification
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    original_img_path = f"output_labels/printer_image_original_{timestamp}.png"
+                    img.save(original_img_path, 'PNG', dpi=(300, 300))
+                    print(f"Original printer image saved: {original_img_path}")
+                    
+                except Exception as e2:
+                    print(f"pdf2image fallback error: {e2}")
+                    print("Both PyMuPDF and pdf2image failed")
+                    return False
+            
+            # Now print the image using the EXACT same method as samplepdfprint.py
+            printer_name = win32print.GetDefaultPrinter()
+            print(f"Printing to: {printer_name}")
+            
+            hDC = win32ui.CreateDC()
+            hDC.CreatePrinterDC(printer_name)
+            
+            # Get printable area (same as samplepdfprint.py)
+            printable_area = (hDC.GetDeviceCaps(win32con.HORZRES),
+                            hDC.GetDeviceCaps(win32con.VERTRES))
+            
+            # Calculate scaling to fit printable area (same as samplepdfprint.py)
+            ratio = min(printable_area[0] / img.size[0], printable_area[1] / img.size[1])
+            scaled_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
+            
+            # Resize image (same as samplepdfprint.py)
+            bmp = img.resize(scaled_size)
+            dib = ImageWin.Dib(bmp)
+            
+            # Save the final scaled image that goes to printer for verification
+            scaled_img_path = f"output_labels/printer_image_scaled_{timestamp}.png"
+            bmp.save(scaled_img_path, 'PNG', dpi=(300, 300))
+            print(f"Scaled printer image saved: {scaled_img_path}")
+            
+            # Print the image (EXACT same code as samplepdfprint.py)
+            hDC.StartDoc("PDF Label Print")
+            hDC.StartPage()
+            
+            # Center the image on the page (same as samplepdfprint.py)
+            x = (printable_area[0] - scaled_size[0]) // 2
+            y = (printable_area[1] - scaled_size[1]) // 2
+            
+            dib.draw(hDC.GetHandleOutput(), (x, y, x + scaled_size[0], y + scaled_size[1]))
+            
+            hDC.EndPage()
+            hDC.EndDoc()
+            hDC.DeleteDC()
+            
+            print("PDF printed successfully using direct win32print method")
+            return True
+            
+        except Exception as e:
+            print(f"Direct PDF print error: {e}")
+            return False
+    
     def print_label(self):
-        """Generate and print label as PDF using exact measurements"""
+        """Generate and print label as PDF directly to printer - simple like samplepdfprint.py"""
         try:
             # Generate PDF label with current data
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             pdf_filename = f"output_labels/label_{timestamp}.pdf"
             
-            # Generate the PDF
+            # Generate the PDF first
             self.generate_pdf_label(pdf_filename)
+            print(f"PDF generated: {pdf_filename}")
             
-            # Try to open with default PDF viewer for printing
-            try:
-                import subprocess
-                import platform
-                
-                if platform.system() == 'Darwin':  # macOS
-                    subprocess.run(['open', pdf_filename])
-                elif platform.system() == 'Windows':
-                    subprocess.run(['start', pdf_filename], shell=True)
-                else:  # Linux
-                    subprocess.run(['xdg-open', pdf_filename])
-                
-                self.status_var.set(f"PDF label generated: {pdf_filename} - Opening for printing")
-                
-            except Exception as e:
-                # If can't open automatically, just notify user
-                self.status_var.set(f"PDF label saved: {pdf_filename} - Please open manually to print")
+            # Print PDF directly to default printer (like samplepdfprint.py approach)
+            if self.print_pdf_directly(pdf_filename):
+                self.status_var.set(f"Label sent to printer: {os.path.basename(pdf_filename)}")
+                # No popup message - just continue to next serial number
+            else:
+                # If printing fails, just notify user that PDF is saved
+                self.status_var.set(f"PDF label saved: {pdf_filename} - Please print manually")
                 messagebox.showinfo("PDF Generated", 
-                                  f"Label saved as PDF: {pdf_filename}\n\nPlease open the file to print.")
+                                  f"Label saved as PDF: {pdf_filename}\n\nPrint failed - please open file and print manually.")
                 
         except Exception as e:
-            messagebox.showerror("Error", f"Error generating PDF label: {e}")
-            self.status_var.set(f"PDF generation error: {e}")
-            print(f"PDF generation error: {e}")  # For debugging
+            messagebox.showerror("Error", f"Error generating/printing PDF label: {e}")
+            self.status_var.set(f"PDF error: {e}")
+            print(f"PDF error: {e}")  # For debugging
     
     def view_excel(self):
         """Show Excel file contents"""
