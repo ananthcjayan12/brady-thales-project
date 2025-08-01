@@ -73,7 +73,8 @@ class EnhancedBarcodeLabelApp:
             'font_company_size': 14,     # For company name/logo text
             'font_label_size': 10,       # For P/D, P/N, P/R, S/N labels
             'font_data_size': 9,         # For data text below barcodes
-            'font_dlm_size': 8           # For DLM text
+            'font_dlm_size': 8,          # For DLM text
+            'template': 1                # Template selection: 1=with barcodes, 2=text only
         }
         
         # Load settings from file or use defaults
@@ -192,6 +193,9 @@ class EnhancedBarcodeLabelApp:
             self.font_label_size_var.set(self.label_settings.get('font_label_size', 10))
             self.font_data_size_var.set(self.label_settings.get('font_data_size', 9))
             self.font_dlm_size_var.set(self.label_settings.get('font_dlm_size', 8))
+            
+            # Update template selection
+            self.template_var.set(self.label_settings.get('template', 1))
             
             # Update logo path
             logo_path = self.label_settings.get('logo_path')
@@ -367,6 +371,23 @@ class EnhancedBarcodeLabelApp:
         
         canvas.bind('<Enter>', _bind_to_mousewheel)
         canvas.bind('<Leave>', _unbind_from_mousewheel)
+
+        # Template selection - more compact
+        template_frame = ttk.LabelFrame(scrollable_frame, text="Label Template", padding="3")
+        template_frame.pack(fill=tk.X, pady=(0, 3))
+
+        ttk.Label(template_frame, text="Template:").grid(row=0, column=0, sticky=tk.W)
+        self.template_var = tk.IntVar(value=self.label_settings.get('template', 1))
+        
+        template_frame_inner = ttk.Frame(template_frame)
+        template_frame_inner.grid(row=0, column=1, sticky=tk.EW, columnspan=2)
+        
+        ttk.Radiobutton(template_frame_inner, text="Template 1 (P/D text, P/N barcode, P/R barcode, S/N barcode)", 
+                       variable=self.template_var, value=1, command=self.on_template_change).pack(anchor=tk.W)
+        ttk.Radiobutton(template_frame_inner, text="Template 2 (P/D text, P/N text, QTY text, S/N text - no barcodes)", 
+                       variable=self.template_var, value=2, command=self.on_template_change).pack(anchor=tk.W)
+
+        template_frame.columnconfigure(1, weight=1)
 
         # Label dimensions (83mm x 32mm) - more compact
         dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="3")
@@ -547,6 +568,11 @@ class EnhancedBarcodeLabelApp:
         self.update_label_settings()
         self.update_preview()
     
+    def on_template_change(self):
+        """Called when template selection changes"""
+        self.update_label_settings()
+        self.update_preview()
+    
 
     
     def update_label_settings(self):
@@ -572,7 +598,8 @@ class EnhancedBarcodeLabelApp:
             'font_company_size': self.font_company_size_var.get(),
             'font_label_size': self.font_label_size_var.get(),
             'font_data_size': self.font_data_size_var.get(),
-            'font_dlm_size': self.font_dlm_size_var.get()
+            'font_dlm_size': self.font_dlm_size_var.get(),
+            'template': self.template_var.get()
         })
     
     def browse_logo(self):
@@ -722,10 +749,17 @@ class EnhancedBarcodeLabelApp:
                                          humanReadable=False,
                                          quiet=0)
             
-            # Add barcode to drawing
+            # Position the barcode properly in the drawing
             barcode.x = 0
             barcode.y = 0
-            drawing.add(barcode)
+            
+            # Add barcode to drawing - fix the ReportLab error
+            try:
+                drawing.add(barcode)
+            except Exception as add_error:
+                print(f"Error adding barcode to drawing: {add_error}")
+                # Fallback: create a simple drawing without the problematic barcode
+                return self.generate_simple_barcode(data, width, height)
             
             # Convert to PIL Image
             pil_img = drawToPIL(drawing, fmt='RGB', dpi=150)
@@ -741,6 +775,35 @@ class EnhancedBarcodeLabelApp:
             # Fall back to simple pattern if ReportLab fails
             return self.generate_simple_barcode(data, width, height)
 
+    def generate_simple_barcode(self, data, width=350, height=35):
+        """Generate a simple black bar pattern as fallback if ReportLab fails"""
+        try:
+            # Create a simple alternating pattern
+            img = Image.new('RGB', (width, height), 'white')
+            draw = ImageDraw.Draw(img)
+            
+            # Simple pattern based on data characters
+            bar_width = max(1, width // (len(data) * 8))
+            x = 0
+            
+            for i, char in enumerate(data):
+                # Use ASCII value to determine bar pattern
+                char_val = ord(char) % 4
+                for j in range(4):
+                    if (char_val + j) % 2 == 0:
+                        draw.rectangle([x, 0, x + bar_width - 1, height], fill='black')
+                    x += bar_width
+                    if x >= width:
+                        break
+                if x >= width:
+                    break
+            
+            return img
+        except Exception as e:
+            print(f"Simple barcode generation error: {e}")
+            # Final fallback - solid black rectangle
+            img = Image.new('RGB', (width, height), 'black')
+            return img
 
     def generate_label_image(self):
         """Generate 83mm x 32mm label with P/D, P/N, P/R, S/N fields"""
@@ -804,62 +867,111 @@ class EnhancedBarcodeLabelApp:
             if not pn_data: pn_data = "CZ5S1000B"
             if not pr_data: pr_data = "02"
             
-            # 3. P/D field (NO BARCODE - text only)
-            draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-            draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
+            # Get template selection
+            template = settings.get('template', 1)
+            print(f"DEBUG: Template selected = {template}")  # Debug output
             
-            # 4. P/N field
-            draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-            pn_barcode = self.generate_barcode(pn_data, settings['barcode_width'], settings['barcode_height'])
-            if pn_barcode:
-                img.paste(pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
+            if template == 1:
+                # Template 1: P/D (text), P/N (barcode), P/R (barcode), S/N (barcode)
+                
+                # P/D field (NO BARCODE - text only)
+                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+                draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
+                
+                # P/N field (with barcode)
+                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+                pn_barcode = self.generate_barcode(pn_data, settings['barcode_width'], settings['barcode_height'])
+                if pn_barcode:
+                    img.paste(pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
+                else:
+                    draw.text((settings['pn_x'] + 30, settings['pn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+                draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 5), pn_data, fill='black', font=font_data)
+                
+                # P/R field (with barcode)
+                draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
+                pr_barcode = self.generate_barcode(pr_data, settings['barcode_width'], settings['barcode_height'])
+                if pr_barcode:
+                    img.paste(pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
+                else:
+                    draw.text((settings['pr_x'] + 30, settings['pr_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+                draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 5), pr_data, fill='black', font=font_data)
+                
+                # S/N field (with barcode)
+                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+                sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
+                if sn_barcode:
+                    img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
+                else:
+                    draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
+                
             else:
-                draw.text((settings['pn_x'] + 30, settings['pn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 5), pn_data, fill='black', font=font_data)
-            
-            # 5. P/R field
-            draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
-            pr_barcode = self.generate_barcode(pr_data, settings['barcode_width'], settings['barcode_height'])
-            if pr_barcode:
-                img.paste(pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
-            else:
-                draw.text((settings['pr_x'] + 30, settings['pr_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 5), pr_data, fill='black', font=font_data)
-            
-            # 6. S/N field
-            draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-            sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
-            if sn_barcode:
-                img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
-            else:
-                draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-            draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
+                # Template 2: P/D (text), P/N (text), QTY (text), S/N (text) - no barcodes
+                
+                # P/D field (text only)
+                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+                draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
+                
+                # P/N field (text only)
+                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+                draw.text((settings['pn_x'] + 30, settings['pn_y']), pn_data, fill='black', font=font_data)
+                
+                # QTY field (text only, always "1")
+                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
+                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
+                
+                # S/N field (text only)
+                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+                draw.text((settings['sn_x'] + 30, settings['sn_y']), sn_data, fill='black', font=font_data)
         
         else:
             # Sample data when no lookup performed
-            # Generate sample barcodes for preview (excluding P/D)
-            sample_pn_barcode = self.generate_simple_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
-            sample_pr_barcode = self.generate_simple_barcode("02", settings['barcode_width'], settings['barcode_height'])
-            sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
+            template = settings.get('template', 1)
+            print(f"DEBUG: Sample template = {template}")  # Debug output
             
-            # P/D (NO BARCODE - text only)
-            draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-            draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
-            
-            # P/N
-            draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-            img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y']))
-            draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 2), "CZ5S1000B", fill='black', font=font_data)
-            
-            # P/R
-            draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
-            img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y']))
-            draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 2), "02", fill='black', font=font_data)
-            
-            # S/N
-            draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-            img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
-            draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
+            if template == 1:
+                # Template 1: Generate sample barcodes for preview
+                sample_pn_barcode = self.generate_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
+                sample_pr_barcode = self.generate_barcode("02", settings['barcode_width'], settings['barcode_height'])
+                sample_sn_barcode = self.generate_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
+                
+                # P/D (NO BARCODE - text only)
+                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+                draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
+                
+                # P/N (with barcode)
+                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+                img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y']))
+                draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 2), "CZ5S1000B", fill='black', font=font_data)
+                
+                # P/R (with barcode)
+                draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
+                img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y']))
+                draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 2), "02", fill='black', font=font_data)
+                
+                # S/N (with barcode)
+                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+                img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
+                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
+                
+            else:
+                # Template 2: Text only preview
+                
+                # P/D (text only)
+                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+                draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
+                
+                # P/N (text only)
+                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+                draw.text((settings['pn_x'] + 30, settings['pn_y']), "CZ5S1000B", fill='black', font=font_data)
+                
+                # QTY (text only, always "1")
+                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
+                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
+                
+                # S/N (text only)
+                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+                draw.text((settings['sn_x'] + 30, settings['sn_y']), "CDL2349-1195", fill='black', font=font_data)
         
         return img
     
