@@ -85,9 +85,22 @@ def main():
         "--hidden-import=tkinter.ttk",
         "--hidden-import=tkinter.filedialog",
         "--hidden-import=tkinter.messagebox",
+        "--hidden-import=reportlab.graphics.barcode.code128",  # ReportLab barcode modules
+        "--hidden-import=reportlab.graphics.barcode.code93",
+        "--hidden-import=reportlab.graphics.barcode.code39", 
+        "--hidden-import=reportlab.graphics.barcode.common",
+        "--hidden-import=reportlab.graphics.barcode.widgets",
+        "--hidden-import=reportlab.graphics.barcode.eanbc",
+        "--hidden-import=reportlab.graphics.barcode.ecc200datamatrix",
+        "--hidden-import=reportlab.graphics.barcode.fourstate",
+        "--hidden-import=reportlab.graphics.barcode.lto",
+        "--hidden-import=reportlab.graphics.barcode.qr",
+        "--hidden-import=reportlab.graphics.barcode.usps",
+        "--hidden-import=reportlab.graphics.barcode.usps4s",
         "--collect-all=treepoem",       # Include all treepoem files
         "--collect-all=PIL",            # Include all PIL files
         "--collect-all=pandas",         # Include all pandas files
+        "--collect-all=reportlab",      # Include all reportlab files
         "simple_barcode_app.py"         # Main script
     ]
     
@@ -106,13 +119,32 @@ def main():
             "--hidden-import=PIL._tkinter_finder",
             "--hidden-import=tkinter",
             "--hidden-import=tkinter.ttk",
+            "--hidden-import=reportlab.graphics.barcode.code128",  # ReportLab barcode modules
+            "--hidden-import=reportlab.graphics.barcode.code93",
+            "--hidden-import=reportlab.graphics.barcode.code39", 
+            "--hidden-import=reportlab.graphics.barcode.common",
+            "--hidden-import=reportlab.graphics.barcode.widgets",
+            "--hidden-import=reportlab.graphics.barcode.eanbc",
+            "--hidden-import=reportlab.graphics.barcode.ecc200datamatrix",
+            "--hidden-import=reportlab.graphics.barcode.fourstate",
+            "--hidden-import=reportlab.graphics.barcode.lto",
+            "--hidden-import=reportlab.graphics.barcode.qr",
+            "--hidden-import=reportlab.graphics.barcode.usps",
+            "--hidden-import=reportlab.graphics.barcode.usps4s",
             "--collect-all=treepoem",
+            "--collect-all=reportlab",
             "simple_barcode_app.py"
         ]
         
         cmd_debug_str = " ".join(pyinstaller_cmd_debug)
         if not run_command(cmd_debug_str, "Building executable (debug mode)"):
-            return False
+            print("\n❌ Standard PyInstaller approaches failed. Trying spec file approach...")
+            
+            # Try using spec file for more control
+            spec_file_cmd = "pyinstaller barcode_app.spec"
+            if not run_command(spec_file_cmd, "Building with spec file"):
+                print("\n❌ All build approaches failed.")
+                return False
     
     # Check if executable was created
     exe_path = os.path.join("dist", "BarcodeGenerator.exe")

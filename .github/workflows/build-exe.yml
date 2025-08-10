@@ -34,7 +34,7 @@ jobs:
     - name: Build executable
       run: |
         cd barcode_label_app
-        pyinstaller --onefile --windowed --name=BarcodeGenerator --add-data="logo.png;." --add-data="data;data" --collect-all=treepoem --collect-all=PIL --hidden-import=tkinter --hidden-import=tkinter.ttk --hidden-import=tkinter.filedialog --hidden-import=tkinter.messagebox simple_barcode_app.py
+        pyinstaller --onefile --windowed --name=BarcodeGenerator --add-data="logo.png;." --add-data="data;data" --hidden-import=tkinter --hidden-import=tkinter.ttk --hidden-import=tkinter.filedialog --hidden-import=tkinter.messagebox --hidden-import=PIL._tkinter_finder --hidden-import=reportlab.graphics.barcode.code128 --hidden-import=reportlab.graphics.barcode.code93 --hidden-import=reportlab.graphics.barcode.code39 --hidden-import=reportlab.graphics.barcode.common --hidden-import=reportlab.graphics.barcode.widgets --hidden-import=reportlab.graphics.barcode.eanbc --hidden-import=reportlab.graphics.barcode.ecc200datamatrix --hidden-import=reportlab.graphics.barcode.fourstate --hidden-import=reportlab.graphics.barcode.lto --hidden-import=reportlab.graphics.barcode.qr --hidden-import=reportlab.graphics.barcode.usps --hidden-import=reportlab.graphics.barcode.usps4s --collect-all=treepoem --collect-all=PIL --collect-all=pandas --collect-all=reportlab simple_barcode_app.py
     
     - name: Create distribution package
       run: |
