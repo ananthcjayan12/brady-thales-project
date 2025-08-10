@@ -11,12 +11,34 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont
-import qrcode
 import os
 import json
+import platform
+import subprocess
 from datetime import datetime
-import win32print, win32ui, win32con
-from PIL import Image, ImageDraw, ImageWin
+import re
+import hashlib
+import io
+import shutil
+
+# Try to import optional barcode libraries
+try:
+    import treepoem
+    TREEPOEM_AVAILABLE = True
+except ImportError:
+    TREEPOEM_AVAILABLE = False
+
+# Windows-specific imports (only import if on Windows)
+if platform.system() == 'Windows':
+    try:
+        import win32print, win32ui, win32con
+        from PIL import ImageWin
+        WINDOWS_AVAILABLE = True
+    except ImportError:
+        WINDOWS_AVAILABLE = False
+        print("Windows print libraries not available")
+else:
+    WINDOWS_AVAILABLE = False
 
 # PDF generation imports
 from reportlab.pdfgen import canvas
@@ -35,16 +57,16 @@ class EnhancedBarcodeLabelApp:
         self.root.geometry("1100x700")
         self.root.minsize(900, 600)  # Set minimum size
         
-        # Excel file path - default (relative to script location)
+        # CSV file path - default (relative to script location)
         script_dir = os.path.dirname(os.path.abspath(__file__))
-        self.excel_file = os.path.join(script_dir, "data", "serial_tracker.xlsx")
+        self.csv_file = os.path.join(script_dir, "data", "serial_tracker.csv")
         self.df = None
         
         # Settings file path
         self.settings_file = os.path.join(script_dir, "label_settings.json")
         
         # Current data
-        self.current_excel_data = None
+        self.current_csv_data = None
         self.current_label = None
         
         # UI variables (will be initialized in setup_ui)
@@ -80,8 +102,8 @@ class EnhancedBarcodeLabelApp:
         # Load settings from file or use defaults
         self.label_settings = self.load_settings()
         
-        # Load Excel file
-        self.load_excel()
+        # Load CSV file
+        self.load_csv()
         
         # Setup UI
         self.setup_ui()
@@ -207,14 +229,14 @@ class EnhancedBarcodeLabelApp:
         except Exception as e:
             print(f"Error updating UI from settings: {e}")
     
-    def load_excel(self):
-        """Load Excel file"""
+    def load_csv(self):
+        """Load CSV file"""
         try:
-            self.df = pd.read_excel(self.excel_file)
-            print(f"Loaded Excel file with {len(self.df)} rows")
+            self.df = pd.read_csv(self.csv_file)
+            print(f"Loaded CSV file with {len(self.df)} rows")
             print(f"Columns: {list(self.df.columns)}")
         except Exception as e:
-            print(f"Error loading Excel: {e}")
+            print(f"Error loading CSV: {e}")
             self.df = None
     
     def setup_ui(self):
@@ -248,19 +270,19 @@ class EnhancedBarcodeLabelApp:
         title = ttk.Label(main_tab, text='Barcode Scanner & Label Generator', font=('Arial', 14, 'bold'))
         title.pack(pady=(0, 10))
         
-        # Excel file selection in Main tab
-        excel_frame = ttk.LabelFrame(main_tab, text="Excel File", padding="10")
-        excel_frame.pack(fill=tk.X, pady=(0, 10))
+        # CSV file selection in Main tab
+        csv_frame = ttk.LabelFrame(main_tab, text="CSV File", padding="10")
+        csv_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.excel_path_var = tk.StringVar(value=self.excel_file)
-        ttk.Label(excel_frame, text="Excel file:").pack(anchor=tk.W)
+        self.csv_path_var = tk.StringVar(value=self.csv_file)
+        ttk.Label(csv_frame, text="CSV file:").pack(anchor=tk.W)
         
-        path_frame = ttk.Frame(excel_frame)
+        path_frame = ttk.Frame(csv_frame)
         path_frame.pack(fill=tk.X, pady=(5, 0))
         
-        ttk.Entry(path_frame, textvariable=self.excel_path_var, width=40).pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(path_frame, text="Browse", command=self.browse_excel).pack(side=tk.RIGHT, padx=(5, 0))
-        ttk.Button(path_frame, text="Load", command=self.load_selected_excel).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Entry(path_frame, textvariable=self.csv_path_var, width=40).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ttk.Button(path_frame, text="Browse", command=self.browse_csv).pack(side=tk.RIGHT, padx=(5, 0))
+        ttk.Button(path_frame, text="Load", command=self.load_selected_csv).pack(side=tk.RIGHT, padx=(5, 0))
         
         # Input section in Main tab
         input_frame = ttk.LabelFrame(main_tab, text="Barcode Input", padding="10")
@@ -279,7 +301,7 @@ class EnhancedBarcodeLabelApp:
         
         ttk.Button(button_frame, text="Lookup", command=self.lookup_data).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(button_frame, text="Clear", command=self.clear_all).pack(side=tk.LEFT, padx=(0, 5))
-        ttk.Button(button_frame, text="View Excel", command=self.view_excel).pack(side=tk.LEFT)
+        ttk.Button(button_frame, text="View CSV", command=self.view_csv).pack(side=tk.LEFT)
         
         # Bind Enter key
         self.barcode_entry.bind('<Return>', lambda e: self.lookup_data())
@@ -298,7 +320,7 @@ class EnhancedBarcodeLabelApp:
         
         # Status bar
         self.status_var = tk.StringVar()
-        self.status_var.set("Ready - Select Excel file and enter serial number for range lookup")
+        self.status_var.set("Ready - Select CSV file and enter serial number for range lookup")
         status_bar = ttk.Label(main_tab, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(fill=tk.X, pady=(10, 0))
 
@@ -371,23 +393,6 @@ class EnhancedBarcodeLabelApp:
         
         canvas.bind('<Enter>', _bind_to_mousewheel)
         canvas.bind('<Leave>', _unbind_from_mousewheel)
-
-        # Template selection - more compact
-        template_frame = ttk.LabelFrame(scrollable_frame, text="Label Template", padding="3")
-        template_frame.pack(fill=tk.X, pady=(0, 3))
-
-        ttk.Label(template_frame, text="Template:").grid(row=0, column=0, sticky=tk.W)
-        self.template_var = tk.IntVar(value=self.label_settings.get('template', 1))
-        
-        template_frame_inner = ttk.Frame(template_frame)
-        template_frame_inner.grid(row=0, column=1, sticky=tk.EW, columnspan=2)
-        
-        ttk.Radiobutton(template_frame_inner, text="Template 1 (P/D text, P/N barcode, P/R barcode, S/N barcode)", 
-                       variable=self.template_var, value=1, command=self.on_template_change).pack(anchor=tk.W)
-        ttk.Radiobutton(template_frame_inner, text="Template 2 (P/D text, P/N text, QTY text, S/N text - no barcodes)", 
-                       variable=self.template_var, value=2, command=self.on_template_change).pack(anchor=tk.W)
-
-        template_frame.columnconfigure(1, weight=1)
 
         # Label dimensions (83mm x 32mm) - more compact
         dims_frame = ttk.LabelFrame(scrollable_frame, text="Dimensions (83mm x 32mm)", padding="3")
@@ -513,6 +518,25 @@ class EnhancedBarcodeLabelApp:
 
         barcode_frame.columnconfigure(1, weight=1)
 
+        # Template selection - more compact
+        template_frame = ttk.LabelFrame(scrollable_frame, text="Label Template", padding="3")
+        template_frame.pack(fill=tk.X, pady=(0, 3))
+
+        ttk.Label(template_frame, text="Template:").grid(row=0, column=0, sticky=tk.W)
+        self.template_var = tk.IntVar(value=self.label_settings.get('template', 1))
+        
+        template_frame_inner = ttk.Frame(template_frame)
+        template_frame_inner.grid(row=0, column=1, sticky=tk.EW, columnspan=2)
+        
+        ttk.Radiobutton(template_frame_inner, text="Template 1 (P/D text, P/N barcode, P/R barcode, S/N barcode)", 
+                       variable=self.template_var, value=1, command=self.on_template_change).pack(anchor=tk.W)
+        ttk.Radiobutton(template_frame_inner, text="Template 2 (P/D text, P/N text, S/N text, QTY text - no barcodes)", 
+                       variable=self.template_var, value=2, command=self.on_template_change).pack(anchor=tk.W)
+        ttk.Radiobutton(template_frame_inner, text="Template 3 (P/D text, P/N text, S/N barcode+text, QTY text)", 
+                       variable=self.template_var, value=3, command=self.on_template_change).pack(anchor=tk.W)
+
+        template_frame.columnconfigure(1, weight=1)
+
         # Font size settings - more compact
         font_frame = ttk.LabelFrame(scrollable_frame, text="Font Sizes", padding="3")
         font_frame.pack(fill=tk.X, pady=(0, 3))
@@ -624,28 +648,28 @@ class EnhancedBarcodeLabelApp:
         self.label_settings['logo_path'] = None
         self.update_preview()
     
-    def browse_excel(self):
-        """Browse for Excel file"""
+    def browse_csv(self):
+        """Browse for CSV file"""
         filename = filedialog.askopenfilename(
-            title="Select Excel File",
-            filetypes=[("Excel files", "*.xlsx *.xls"), ("All files", "*.*")]
+            title="Select CSV File",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
         )
         if filename:
-            self.excel_path_var.set(filename)
+            self.csv_path_var.set(filename)
     
-    def load_selected_excel(self):
-        """Load the selected Excel file"""
-        self.excel_file = self.excel_path_var.get()
-        self.load_excel()
+    def load_selected_csv(self):
+        """Load the selected CSV file"""
+        self.csv_file = self.csv_path_var.get()
+        self.load_csv()
         if self.df is not None:
-            self.status_var.set(f"Loaded Excel: {os.path.basename(self.excel_file)}")
+            self.status_var.set(f"Loaded CSV: {os.path.basename(self.csv_file)}")
         else:
-            self.status_var.set("Failed to load Excel file")
+            self.status_var.set("Failed to load CSV file")
     
     def lookup_data(self):
         """Range-based lookup - check if serial number is between SL.From and SL.End"""
         if self.df is None:
-            messagebox.showerror("Error", "Excel file not loaded!")
+            messagebox.showerror("Error", "CSV file not loaded!")
             return
         
         serial_number = self.barcode_var.get().strip()
@@ -703,13 +727,28 @@ class EnhancedBarcodeLabelApp:
         
         if not found_rows:
             messagebox.showerror("Error", f"No range found for serial number: {serial_number}")
-            self.current_excel_data = None
+            self.current_csv_data = None
             self.status_var.set(f"No range found for serial: {serial_number}")
             self.update_preview()
             return
         
         # Use first match for label generation
-        self.current_excel_data = found_rows[0][1].to_dict()
+        self.current_csv_data = found_rows[0][1].to_dict()
+        
+        # Get template from CSV if available
+        csv_template = self.get_field_data(['Template', 'TEMPLATE', 'template'])
+        if csv_template:
+            try:
+                template_num = int(csv_template)
+                if template_num in [1, 2, 3]:
+                    self.template_var.set(template_num)
+                    self.label_settings['template'] = template_num
+                    print(f"Using template {template_num} from CSV")
+                else:
+                    print(f"Invalid template value in CSV: {csv_template}, using default")
+            except (ValueError, TypeError):
+                print(f"Invalid template value in CSV: {csv_template}, using default")
+        
         self.update_preview()
         self.print_label()
         self.status_var.set(f"Scanned {serial_number} - sent to printer")
@@ -717,96 +756,147 @@ class EnhancedBarcodeLabelApp:
         self.barcode_entry.focus()
     
     def generate_barcode(self, data, width=350, height=35):
-        """Generate a clean Code128 barcode using ReportLab's built-in barcode - simple and reliable"""
+        """Generate a clean Code128 barcode with multiple fallback options"""
+        
+        # First, try treepoem if available
         try:
-            from reportlab.graphics.barcode import code128
-            from reportlab.graphics.renderPM import drawToPIL
-            from reportlab.graphics.shapes import Drawing
-            from reportlab.lib.units import mm
+            import shutil
+            # Check for Ghostscript executable
+            if shutil.which('gs') or shutil.which('gswin64c') or shutil.which('gswin32c'):
+                import treepoem
+                
+                # Generate Code128 barcode with improved options for clarity
+                barcode_img = treepoem.generate_barcode(
+                    barcode_type='code128',
+                    data=data,
+                    options={
+                        'includetext': False, 
+                        'height': 0.8,
+                        'width': 0.015,
+                        'textxalign': 'center'
+                    }
+                )
+                
+                if barcode_img.mode != 'RGB':
+                    barcode_img = barcode_img.convert('RGB')
+                    
+                # Resize for better quality
+                final_img = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
+                return final_img
+                
+        except Exception as e:
+            print(f"Treepoem barcode error: {e}")
+        
+        # Second, try python-barcode library
+        try:
+            from barcode import Code128
+            from barcode.writer import ImageWriter
+            import io
             
-            # Create a drawing with the barcode
-            drawing = Drawing(width, height)
+            # Create barcode with python-barcode
+            code = Code128(data, writer=ImageWriter())
+            buffer = io.BytesIO()
+            code.write(buffer, options={
+                'module_width': 0.3,
+                'module_height': 10,
+                'quiet_zone': 2,
+                'font_size': 0,  # No text
+                'text_distance': 0,
+                'background': 'white',
+                'foreground': 'black'
+            })
+            buffer.seek(0)
             
-            # Calculate bar width to fit the desired width
-            estimated_bars = len(data) * 11 + 35  # Rough estimate including start/stop/check
-            target_bar_width = width / estimated_bars
-            bar_width = max(0.5, target_bar_width)  # Minimum bar width for readability
-            
-            # Create the barcode with calculated bar width
-            barcode = code128.Code128(data, 
-                                     barWidth=bar_width,
-                                     barHeight=height,
-                                     humanReadable=False,  # We'll add text separately
-                                     quiet=0)  # No quiet zones - we control positioning
-            
-            # Get the actual width of the generated barcode and scale if needed
-            actual_width = barcode.width
-            if actual_width > 0 and actual_width != width:
-                scale_factor = width / actual_width
-                barcode = code128.Code128(data, 
-                                         barWidth=bar_width * scale_factor,
-                                         barHeight=height,
-                                         humanReadable=False,
-                                         quiet=0)
-            
-            # Position the barcode properly in the drawing
-            barcode.x = 0
-            barcode.y = 0
-            
-            # Add barcode to drawing - fix the ReportLab error
-            try:
-                drawing.add(barcode)
-            except Exception as add_error:
-                print(f"Error adding barcode to drawing: {add_error}")
-                # Fallback: create a simple drawing without the problematic barcode
-                return self.generate_simple_barcode(data, width, height)
-            
-            # Convert to PIL Image
-            pil_img = drawToPIL(drawing, fmt='RGB', dpi=150)
-            
-            # Ensure it's the right size
-            if pil_img.size != (width, height):
-                pil_img = pil_img.resize((width, height), Image.Resampling.LANCZOS)
-            
-            return pil_img
+            barcode_img = Image.open(buffer)
+            if barcode_img.mode != 'RGB':
+                barcode_img = barcode_img.convert('RGB')
+                
+            # Resize to target size
+            final_img = barcode_img.resize((width, height), Image.Resampling.LANCZOS)
+            return final_img
             
         except Exception as e:
-            print(f"ReportLab barcode error: {e}")
-            # Fall back to simple pattern if ReportLab fails
-            return self.generate_simple_barcode(data, width, height)
-
+            print(f"Python-barcode error: {e}")
+        
+        # Final fallback to simple pattern
+        print(f"Using simple barcode fallback for: {data}")
+        return self.generate_simple_barcode(data, width, height)
+    
     def generate_simple_barcode(self, data, width=350, height=35):
-        """Generate a simple black bar pattern as fallback if ReportLab fails"""
-        try:
-            # Create a simple alternating pattern
-            img = Image.new('RGB', (width, height), 'white')
-            draw = ImageDraw.Draw(img)
+        """Fallback: Generate a simple barcode pattern with proper bars"""
+        img = Image.new('RGB', (width, height), 'white')
+        draw = ImageDraw.Draw(img)
+        
+        # Create Code128-like pattern manually
+        import hashlib
+        
+        # Use hash to create consistent pattern
+        hash_val = hashlib.md5(data.encode()).hexdigest()
+        
+        # Calculate bar dimensions for proper barcode appearance
+        margin = 10
+        usable_width = width - (2 * margin)
+        bar_count = min(len(data) * 6, usable_width // 2)  # Ensure we have enough bars
+        
+        if bar_count == 0:
+            bar_count = 20  # Minimum bars
             
-            # Simple pattern based on data characters
-            bar_width = max(1, width // (len(data) * 8))
-            x = 0
-            
-            for i, char in enumerate(data):
-                # Use ASCII value to determine bar pattern
-                char_val = ord(char) % 4
-                for j in range(4):
-                    if (char_val + j) % 2 == 0:
-                        draw.rectangle([x, 0, x + bar_width - 1, height], fill='black')
+        narrow_bar = max(1, usable_width // (bar_count * 3))  # Narrow bar width
+        wide_bar = narrow_bar * 2  # Wide bar width
+        
+        x = margin
+        
+        # Create start pattern (typical for Code128)
+        start_pattern = [1, 1, 0, 1, 0, 1, 1, 0]  # Start B pattern
+        for bar in start_pattern:
+            bar_width = wide_bar if bar else narrow_bar
+            if bar:
+                draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
+            x += bar_width
+            if x >= width - margin:
+                break
+        
+        # Generate data bars based on hash
+        for i in range(0, min(len(hash_val), 20), 2):
+            if x >= width - margin - 20:  # Leave space for stop pattern
+                break
+                
+            try:
+                hex_val = int(hash_val[i:i+2], 16)
+                
+                # Create alternating bar pattern based on hex value
+                for bit in range(4):
+                    is_bar = (hex_val >> bit) & 1
+                    bar_width = wide_bar if (hex_val % 3 == 0) else narrow_bar
+                    
+                    if is_bar:
+                        draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
                     x += bar_width
-                    if x >= width:
+                    
+                    if x >= width - margin - 20:
                         break
-                if x >= width:
+                        
+            except (ValueError, IndexError):
+                continue
+        
+        # Add stop pattern
+        if x < width - margin:
+            stop_pattern = [1, 1, 0, 0, 1, 1, 1]  # Stop pattern
+            for bar in stop_pattern:
+                if x >= width - 5:
                     break
-            
-            return img
-        except Exception as e:
-            print(f"Simple barcode generation error: {e}")
-            # Final fallback - solid black rectangle
-            img = Image.new('RGB', (width, height), 'black')
-            return img
-
+                bar_width = narrow_bar
+                if bar:
+                    draw.rectangle([x, 3, x + bar_width - 1, height - 3], fill='black')
+                x += bar_width
+        
+        return img
+    
     def generate_label_image(self):
-        """Generate 83mm x 32mm label with P/D, P/N, P/R, S/N fields"""
+        """Generate 83mm x 32mm label with 3 template options:
+        Template 1: P/D text, P/N barcode, P/R barcode, S/N barcode
+        Template 2: P/D text, P/N text, S/N text, QTY text (no barcodes)  
+        Template 3: P/D text, P/N text, S/N barcode+text, QTY text"""
         settings = self.label_settings
         width = settings['width']
         height = settings['height']
@@ -853,8 +943,8 @@ class EnhancedBarcodeLabelApp:
             # No logo - draw fallback text
             draw.text((settings['logo_x'], settings['logo_y']), "CYIENT DLM", fill='black', font=font_company)
         
-        if self.current_excel_data:
-            # Get field data from Excel
+        if self.current_csv_data:
+            # Get field data from CSV
             pd_data = self.get_field_data(['P/D', 'PD', 'DESCRIPTION', 'DESC', 'PRODUCT'])
             pn_data = self.get_field_data(['P/N', 'PN', 'PART', 'CPN', 'PART_NUMBER'])
             pr_data = self.get_field_data(['P/R', 'PR', 'REVISION', 'REV', 'VERSION'])
@@ -867,18 +957,18 @@ class EnhancedBarcodeLabelApp:
             if not pn_data: pn_data = "CZ5S1000B"
             if not pr_data: pr_data = "02"
             
-            # Get template selection
-            template = settings.get('template', 1)
-            print(f"DEBUG: Template selected = {template}")  # Debug output
+            # Get current template (from CSV or UI setting)
+            current_template = self.label_settings.get('template', 1)
             
-            if template == 1:
-                # Template 1: P/D (text), P/N (barcode), P/R (barcode), S/N (barcode)
+            if current_template == 1:
+        
+                # Template 1: P/D text, P/N barcode, P/R barcode, S/N barcode
                 
-                # P/D field (NO BARCODE - text only)
+                # P/D field (text only)
                 draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
                 draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
                 
-                # P/N field (with barcode)
+                # P/N field (barcode + text)
                 draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
                 pn_barcode = self.generate_barcode(pn_data, settings['barcode_width'], settings['barcode_height'])
                 if pn_barcode:
@@ -887,7 +977,7 @@ class EnhancedBarcodeLabelApp:
                     draw.text((settings['pn_x'] + 30, settings['pn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
                 draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 5), pn_data, fill='black', font=font_data)
                 
-                # P/R field (with barcode)
+                # P/R field (barcode + text)
                 draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
                 pr_barcode = self.generate_barcode(pr_data, settings['barcode_width'], settings['barcode_height'])
                 if pr_barcode:
@@ -896,7 +986,7 @@ class EnhancedBarcodeLabelApp:
                     draw.text((settings['pr_x'] + 30, settings['pr_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
                 draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 5), pr_data, fill='black', font=font_data)
                 
-                # S/N field (with barcode)
+                # S/N field (barcode + text)
                 draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
                 sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
                 if sn_barcode:
@@ -905,8 +995,8 @@ class EnhancedBarcodeLabelApp:
                     draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
                 draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
                 
-            else:
-                # Template 2: P/D (text), P/N (text), QTY (text), S/N (text) - no barcodes
+            elif current_template == 2:
+                # Template 2: P/D text, P/N text, S/N text, QTY text - NO barcodes
                 
                 # P/D field (text only)
                 draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
@@ -916,46 +1006,69 @@ class EnhancedBarcodeLabelApp:
                 draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
                 draw.text((settings['pn_x'] + 30, settings['pn_y']), pn_data, fill='black', font=font_data)
                 
-                # QTY field (text only, always "1")
+                # QTY field (text only) - using P/R position
                 draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
                 draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
                 
                 # S/N field (text only)
                 draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
                 draw.text((settings['sn_x'] + 30, settings['sn_y']), sn_data, fill='black', font=font_data)
+                
+            elif current_template == 3:
+                # Template 3: P/D text, P/N text, S/N barcode+text, QTY text
+                
+                # P/D field (text only)
+                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+                draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
+                
+                # P/N field (text only)
+                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+                draw.text((settings['pn_x'] + 30, settings['pn_y']), pn_data, fill='black', font=font_data)
+                
+                # QTY field (text only) - using P/R position
+                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
+                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
+                
+                # S/N field (barcode + text) - only field with barcode in template 3
+                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+                sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
+                if sn_barcode:
+                    img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
+                else:
+                    draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
+                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
         
         else:
-            # Sample data when no lookup performed
-            template = settings.get('template', 1)
-            print(f"DEBUG: Sample template = {template}")  # Debug output
+            # Sample data when no lookup performed - show based on selected template
+            current_template = self.label_settings.get('template', 1)
             
-            if template == 1:
-                # Template 1: Generate sample barcodes for preview
-                sample_pn_barcode = self.generate_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
-                sample_pr_barcode = self.generate_barcode("02", settings['barcode_width'], settings['barcode_height'])
-                sample_sn_barcode = self.generate_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
+            if current_template == 1:
+                # Template 1 preview: with barcodes
+                sample_pn_barcode = self.generate_simple_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
+                sample_pr_barcode = self.generate_simple_barcode("02", settings['barcode_width'], settings['barcode_height'])
+                sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
                 
-                # P/D (NO BARCODE - text only)
+                # P/D (text only)
                 draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
                 draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
                 
-                # P/N (with barcode)
+                # P/N (barcode + text)
                 draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
                 img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y']))
                 draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 2), "CZ5S1000B", fill='black', font=font_data)
                 
-                # P/R (with barcode)
+                # P/R (barcode + text)
                 draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
                 img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y']))
                 draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 2), "02", fill='black', font=font_data)
                 
-                # S/N (with barcode)
+                # S/N (barcode + text)
                 draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
                 img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
                 draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
                 
-            else:
-                # Template 2: Text only preview
+            elif current_template == 2:
+                # Template 2 preview: text only, no barcodes
                 
                 # P/D (text only)
                 draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
@@ -965,13 +1078,34 @@ class EnhancedBarcodeLabelApp:
                 draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
                 draw.text((settings['pn_x'] + 30, settings['pn_y']), "CZ5S1000B", fill='black', font=font_data)
                 
-                # QTY (text only, always "1")
+                # QTY (text only)
                 draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
                 draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
                 
                 # S/N (text only)
                 draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
                 draw.text((settings['sn_x'] + 30, settings['sn_y']), "CDL2349-1195", fill='black', font=font_data)
+                
+            elif current_template == 3:
+                # Template 3 preview: only S/N has barcode
+                sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
+                
+                # P/D (text only)
+                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
+                draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
+                
+                # P/N (text only)
+                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
+                draw.text((settings['pn_x'] + 30, settings['pn_y']), "CZ5S1000B", fill='black', font=font_data)
+                
+                # QTY (text only)
+                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
+                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
+                
+                # S/N (barcode + text)
+                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
+                img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
+                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
         
         return img
     
@@ -1021,12 +1155,12 @@ class EnhancedBarcodeLabelApp:
         return None
     
     def get_field_data(self, field_names):
-        """Get data for a field from Excel using multiple possible column names"""
-        if not self.current_excel_data:
+        """Get data for a field from CSV using multiple possible column names"""
+        if not self.current_csv_data:
             return None
             
         for field_name in field_names:
-            for key, value in self.current_excel_data.items():
+            for key, value in self.current_csv_data.items():
                 if field_name.upper() in key.upper():
                     return str(value)
         return None
@@ -1102,73 +1236,70 @@ class EnhancedBarcodeLabelApp:
             messagebox.showerror("Error", f"Error saving label: {e}")
             print(f"Save error: {e}")  # For debugging
     
-    def print_pdf_as_image(self, pdf_path):
-        """Convert PDF to image and print using the exact same method as samplepdfprint.py"""
+    def print_label(self):
+        """Generate and print label - cross-platform handling"""
         try:
-            # Convert PDF to image first
-            try:
-                import fitz  # PyMuPDF
-                # Open PDF and convert first page to image
-                pdf_document = fitz.open(pdf_path)
-                page = pdf_document[0]
-                # Render page as image with high DPI for printing
-                mat = fitz.Matrix(3.0, 3.0)  # 3x zoom for better quality
-                pix = page.get_pixmap(matrix=mat)
-                img_data = pix.tobytes("ppm")
-                
-                # Create PIL Image from the data
-                from io import BytesIO
-                img = Image.open(BytesIO(img_data))
-                pdf_document.close()
-                
-            except ImportError:
-                # PyMuPDF not available, try using pdf2image
+            # Generate PDF label with current data
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            pdf_filename = f"output_labels/label_{timestamp}.pdf"
+            
+            # Generate the PDF
+            self.generate_pdf_label(pdf_filename)
+            
+            # Cross-platform handling
+            if platform.system() == 'Darwin':  # macOS
+                # On macOS, just show preview instead of trying to print directly
                 try:
-                    from pdf2image import convert_from_path
-                    images = convert_from_path(pdf_path, dpi=300, first_page=1, last_page=1)
-                    img = images[0]
-                except ImportError:
-                    return False  # No PDF conversion libraries available
-            
-            # Now print the image using the exact same method as samplepdfprint.py
-            printer_name = win32print.GetDefaultPrinter()
-            print(f"Printing to: {printer_name}")
-            
-            hDC = win32ui.CreateDC()
-            hDC.CreatePrinterDC(printer_name)
-            
-            # Get printable area
-            printable_area = (hDC.GetDeviceCaps(win32con.HORZRES),
-                            hDC.GetDeviceCaps(win32con.VERTRES))
-            
-            # Calculate scaling to fit printable area
-            ratio = min(printable_area[0] / img.size[0], printable_area[1] / img.size[1])
-            scaled_size = (int(img.size[0] * ratio), int(img.size[1] * ratio))
-            
-            # Resize image
-            bmp = img.resize(scaled_size)
-            dib = ImageWin.Dib(bmp)
-            
-            # Print the image
-            hDC.StartDoc("Label Print")
-            hDC.StartPage()
-            
-            # Center the image on the page
-            x = (printable_area[0] - scaled_size[0]) // 2
-            y = (printable_area[1] - scaled_size[1]) // 2
-            
-            dib.draw(hDC.GetHandleOutput(), (x, y, x + scaled_size[0], y + scaled_size[1]))
-            
-            hDC.EndPage()
-            hDC.EndDoc()
-            hDC.DeleteDC()
-            
-            return True
-            
+                    subprocess.run(['open', pdf_filename], check=True)
+                    self.status_var.set(f"PDF opened for preview/printing: {pdf_filename}")
+                    messagebox.showinfo("macOS Print", 
+                                      f"PDF opened in Preview. Use File → Print to print the label.\n\n"
+                                      f"File: {pdf_filename}")
+                except Exception as e:
+                    messagebox.showinfo("PDF Generated", 
+                                      f"PDF label generated: {pdf_filename}\n\n"
+                                      f"Please open the file manually to print.\n\n"
+                                      f"Error opening automatically: {e}")
+                    
+            elif platform.system() == 'Windows':
+                # On Windows, try direct printing if available
+                if WINDOWS_AVAILABLE:
+                    try:
+                        # Try PDF to image printing
+                        success = self.print_pdf_directly(pdf_filename)
+                        if success:
+                            self.status_var.set(f"Label printed successfully: {pdf_filename}")
+                        else:
+                            # Fallback to opening PDF
+                            subprocess.run(['start', pdf_filename], shell=True)
+                            self.status_var.set(f"PDF opened for printing: {pdf_filename}")
+                            messagebox.showinfo("Print", 
+                                              f"PDF opened for printing. Please use Ctrl+P to print.\n\n"
+                                              f"File: {pdf_filename}")
+                    except Exception as e:
+                        # Final fallback
+                        subprocess.run(['start', pdf_filename], shell=True)
+                        self.status_var.set(f"PDF opened: {pdf_filename}")
+                else:
+                    # Windows print not available, just open PDF
+                    subprocess.run(['start', pdf_filename], shell=True)
+                    self.status_var.set(f"PDF opened for printing: {pdf_filename}")
+                    
+            else:  # Linux and other systems
+                try:
+                    subprocess.run(['xdg-open', pdf_filename], check=True)
+                    self.status_var.set(f"PDF opened for printing: {pdf_filename}")
+                except Exception:
+                    messagebox.showinfo("PDF Generated", 
+                                      f"PDF label generated: {pdf_filename}\n\n"
+                                      f"Please open the file manually to print.")
+                    self.status_var.set(f"PDF generated: {pdf_filename}")
+                
         except Exception as e:
-            print(f"PDF to image print error: {e}")
-            return False
-
+            messagebox.showerror("Error", f"Error generating PDF label: {e}")
+            self.status_var.set(f"PDF generation error: {e}")
+            print(f"PDF generation error: {e}")  # For debugging
+    
     def print_pdf_directly(self, pdf_path):
         """Convert PDF to image and print directly using win32print - exactly like samplepdfprint.py"""
         try:
@@ -1291,47 +1422,21 @@ class EnhancedBarcodeLabelApp:
             print(f"Direct PDF print error: {e}")
             return False
     
-    def print_label(self):
-        """Generate and print label as PDF directly to printer - simple like samplepdfprint.py"""
-        try:
-            # Generate PDF label with current data
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            pdf_filename = f"output_labels/label_{timestamp}.pdf"
-            
-            # Generate the PDF first
-            self.generate_pdf_label(pdf_filename)
-            print(f"PDF generated: {pdf_filename}")
-            
-            # Print PDF directly to default printer (like samplepdfprint.py approach)
-            if self.print_pdf_directly(pdf_filename):
-                self.status_var.set(f"Label sent to printer: {os.path.basename(pdf_filename)}")
-                # No popup message - just continue to next serial number
-            else:
-                # If printing fails, just notify user that PDF is saved
-                self.status_var.set(f"PDF label saved: {pdf_filename} - Please print manually")
-                messagebox.showinfo("PDF Generated", 
-                                  f"Label saved as PDF: {pdf_filename}\n\nPrint failed - please open file and print manually.")
-                
-        except Exception as e:
-            messagebox.showerror("Error", f"Error generating/printing PDF label: {e}")
-            self.status_var.set(f"PDF error: {e}")
-            print(f"PDF error: {e}")  # For debugging
-    
-    def view_excel(self):
-        """Show Excel file contents"""
+    def view_csv(self):
+        """Show CSV file contents"""
         if self.df is None:
-            messagebox.showerror("Error", "Excel file not loaded!")
+            messagebox.showerror("Error", "CSV file not loaded!")
             return
         
-        # Create Excel viewer window
-        excel_window = tk.Toplevel(self.root)
-        excel_window.title("Excel File Contents")
-        excel_window.geometry("900x500")
+        # Create CSV viewer window
+        csv_window = tk.Toplevel(self.root)
+        csv_window.title("CSV File Contents")
+        csv_window.geometry("900x500")
         
-        frame = ttk.Frame(excel_window, padding="10")
+        frame = ttk.Frame(csv_window, padding="10")
         frame.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Label(frame, text=f"File: {self.excel_file}", font=('Arial', 12, 'bold')).pack(anchor=tk.W)
+        ttk.Label(frame, text=f"File: {self.csv_file}", font=('Arial', 12, 'bold')).pack(anchor=tk.W)
         ttk.Label(frame, text=f"Rows: {len(self.df)} | Columns: {len(self.df.columns)}", 
                  font=('Arial', 10)).pack(anchor=tk.W, pady=(0, 10))
         
@@ -1373,8 +1478,7 @@ class EnhancedBarcodeLabelApp:
     def clear_all(self):
         """Clear all data"""
         self.barcode_var.set("")
-        self.results_text.delete(1.0, tk.END)
-        self.current_excel_data = None
+        self.current_csv_data = None
         self.barcode_entry.focus()
         self.status_var.set("Cleared - Ready for new serial number lookup")
         self.update_preview()
@@ -1559,8 +1663,8 @@ class EnhancedBarcodeLabelApp:
             c.setFillColor(blue)
             c.drawString((config_mm['logo_x'] + 21) * mm, self.flip_y(config_mm['logo_y'] + 4, label_height), "DLM")
         
-        # Get data from current excel data or use defaults
-        if self.current_excel_data:
+        # Get data from current CSV data or use defaults
+        if self.current_csv_data:
             pd_data = self.get_field_data(['P/D', 'PD', 'DESCRIPTION', 'DESC', 'PRODUCT']) or "SCB CCA"
             pn_data = self.get_field_data(['P/N', 'PN', 'PART', 'CPN', 'PART_NUMBER']) or "CZ5S1000B"
             pr_data = self.get_field_data(['P/R', 'PR', 'REVISION', 'REV', 'VERSION']) or "02"
@@ -1581,53 +1685,126 @@ class EnhancedBarcodeLabelApp:
         c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
                      self.flip_y(pd_y + 3, label_height), pd_data)
         
-        # 3. P/N field (with barcode)
-        c.setFont("Helvetica-Bold", 10)
-        pn_y = field_positions_mm['P/N']
-        c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
+        # Get current template (from CSV or UI setting)
+        current_template = self.label_settings.get('template', 1)
         
-        # Draw P/N barcode
-        self.create_barcode_directly(c, pn_data, 
-                               (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                               self.flip_y(pn_y + config_mm['barcode_height'] + 1, label_height),
-                               config_mm['barcode_width'], config_mm['barcode_height'])
+        if current_template == 1:
+            # Template 1: P/D text, P/N barcode, P/R barcode, S/N barcode
+            
+            # P/N field (with barcode)
+            c.setFont("Helvetica-Bold", 10)
+            pn_y = field_positions_mm['P/N']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
+            
+            # Draw P/N barcode
+            self.create_barcode_directly(c, pn_data, 
+                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                                   self.flip_y(pn_y + config_mm['barcode_height'] + 1, label_height),
+                                   config_mm['barcode_width'], config_mm['barcode_height'])
+            
+            # P/N text below barcode
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
+                         self.flip_y(pn_y + config_mm['barcode_height'] + 4, label_height), pn_data)
+            
+            # P/R field (with barcode)
+            c.setFont("Helvetica-Bold", 10)
+            pr_y = field_positions_mm['P/R']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "P/R")
+            
+            # Draw P/R barcode
+            self.create_barcode_directly(c, pr_data, 
+                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                                   self.flip_y(pr_y + config_mm['barcode_height'] + 1, label_height),
+                                   config_mm['barcode_width'], config_mm['barcode_height'])
+            
+            # P/R text below barcode
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
+                         self.flip_y(pr_y + config_mm['barcode_height'] + 4, label_height), pr_data)
+            
+            # S/N field (with barcode)
+            c.setFont("Helvetica-Bold", 10)
+            sn_y = field_positions_mm['S/N']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
+            
+            # Draw S/N barcode
+            self.create_barcode_directly(c, sn_data, 
+                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                                   self.flip_y(sn_y + config_mm['barcode_height'] + 1, label_height),
+                                   config_mm['barcode_width'], config_mm['barcode_height'])
+            
+            # S/N text below barcode
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
+                         self.flip_y(sn_y + config_mm['barcode_height'] + 4, label_height), sn_data)
         
-        # P/N text below barcode
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(pn_y + config_mm['barcode_height'] + 4, label_height), pn_data)
+        elif current_template == 2:
+            # Template 2: P/D text, P/N text, S/N text, QTY text - NO barcodes
+            
+            # P/N field (text only)
+            c.setFont("Helvetica-Bold", 10)
+            pn_y = field_positions_mm['P/N']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
+            
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                         self.flip_y(pn_y + 3, label_height), pn_data)
+            
+            # QTY field (text only) - using P/R position
+            c.setFont("Helvetica-Bold", 10)
+            pr_y = field_positions_mm['P/R']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "QTY")
+            
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                         self.flip_y(pr_y + 3, label_height), "1")
+            
+            # S/N field (text only)
+            c.setFont("Helvetica-Bold", 10)
+            sn_y = field_positions_mm['S/N']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
+            
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                         self.flip_y(sn_y + 3, label_height), sn_data)
         
-        # 4. P/R field (with barcode)
-        c.setFont("Helvetica-Bold", 10)
-        pr_y = field_positions_mm['P/R']
-        c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "P/R")
-        
-        # Draw P/R barcode
-        self.create_barcode_directly(c, pr_data, 
-                               (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                               self.flip_y(pr_y + config_mm['barcode_height'] + 1, label_height),
-                               config_mm['barcode_width'], config_mm['barcode_height'])
-        
-        # P/R text below barcode
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(pr_y + config_mm['barcode_height'] + 4, label_height), pr_data)
-        
-        # 5. S/N field (with barcode)
-        c.setFont("Helvetica-Bold", 10)
-        sn_y = field_positions_mm['S/N']
-        c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
-        
-        # Draw S/N barcode
-        self.create_barcode_directly(c, sn_data, 
-                               (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                               self.flip_y(sn_y + config_mm['barcode_height'] + 1, label_height),
-                               config_mm['barcode_width'], config_mm['barcode_height'])
-        
-        # S/N text below barcode
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(sn_y + config_mm['barcode_height'] + 4, label_height), sn_data)
+        elif current_template == 3:
+            # Template 3: P/D text, P/N text, S/N barcode+text, QTY text
+            
+            # P/N field (text only)
+            c.setFont("Helvetica-Bold", 10)
+            pn_y = field_positions_mm['P/N']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
+            
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                         self.flip_y(pn_y + 3, label_height), pn_data)
+            
+            # QTY field (text only) - using P/R position  
+            c.setFont("Helvetica-Bold", 10)
+            pr_y = field_positions_mm['P/R']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "QTY")
+            
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                         self.flip_y(pr_y + 3, label_height), "1")
+            
+            # S/N field (with barcode) - only field with barcode in template 3
+            c.setFont("Helvetica-Bold", 10)
+            sn_y = field_positions_mm['S/N']
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
+            
+            # Draw S/N barcode
+            self.create_barcode_directly(c, sn_data, 
+                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
+                                   self.flip_y(sn_y + config_mm['barcode_height'] + 1, label_height),
+                                   config_mm['barcode_width'], config_mm['barcode_height'])
+            
+            # S/N text below barcode
+            c.setFont("Helvetica", 8)
+            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
+                         self.flip_y(sn_y + config_mm['barcode_height'] + 4, label_height), sn_data)
         
         # Save the PDF
         c.save()
