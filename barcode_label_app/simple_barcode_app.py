@@ -65,6 +65,10 @@ class EnhancedBarcodeLabelApp:
         # Settings file path
         self.settings_file = os.path.join(script_dir, "label_settings.json")
         
+        # Printed labels tracking file
+        self.printed_labels_file = os.path.join(script_dir, "printed_labels.json")
+        self.printed_labels = self.load_printed_labels()
+        
         # Current data
         self.current_csv_data = None
         self.current_label = None
@@ -188,6 +192,50 @@ class EnhancedBarcodeLabelApp:
             self.status_var.set("Settings reset to defaults")
             if hasattr(self, 'settings_status_var') and self.settings_status_var:
                 self.settings_status_var.set("Using default settings")
+    
+    def load_printed_labels(self):
+        """Load printed labels tracking from JSON file"""
+        try:
+            if os.path.exists(self.printed_labels_file):
+                with open(self.printed_labels_file, 'r') as f:
+                    printed_labels = json.load(f)
+                print(f"Loaded {len(printed_labels)} printed labels from tracking file")
+                return printed_labels
+            else:
+                print("No printed labels tracking file found, starting fresh")
+                return {}
+        except Exception as e:
+            print(f"Error loading printed labels: {e}, starting fresh")
+            return {}
+    
+    def save_printed_labels(self):
+        """Save printed labels tracking to JSON file"""
+        try:
+            with open(self.printed_labels_file, 'w') as f:
+                json.dump(self.printed_labels, f, indent=2)
+            print(f"Saved {len(self.printed_labels)} printed labels to tracking file")
+        except Exception as e:
+            print(f"Error saving printed labels: {e}")
+    
+    def is_already_printed(self, serial_number):
+        """Check if a serial number has already been printed"""
+        return serial_number in self.printed_labels
+    
+    def mark_as_printed(self, serial_number):
+        """Mark a serial number as printed with timestamp"""
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.printed_labels[serial_number] = {
+            'printed_at': timestamp,
+            'template': self.label_settings.get('template', 1)
+        }
+        self.save_printed_labels()
+        print(f"Marked {serial_number} as printed at {timestamp}")
+    
+    def get_printed_info(self, serial_number):
+        """Get information about when a serial number was printed"""
+        if serial_number in self.printed_labels:
+            return self.printed_labels[serial_number]
+        return None
     
     def update_ui_from_settings(self):
         """Update UI controls to match current settings"""
@@ -1239,12 +1287,33 @@ class EnhancedBarcodeLabelApp:
     def print_label(self):
         """Generate and print label - cross-platform handling"""
         try:
+            # Check for duplicate printing prevention
+            serial_number = self.barcode_entry.get().strip()
+            if serial_number and self.is_already_printed(serial_number):
+                printed_info = self.get_printed_info(serial_number)
+                printed_time = printed_info.get('printed_at', 'Unknown')
+                template_used = printed_info.get('template', 'Unknown')
+                
+                # Show confirmation dialog
+                message = (f"Serial number '{serial_number}' has already been printed!\n\n"
+                          f"Previously printed: {printed_time}\n"
+                          f"Template used: {template_used}\n\n"
+                          f"Do you want to print it again anyway?")
+                
+                if not messagebox.askyesno("Duplicate Print Warning", message):
+                    self.status_var.set(f"Print cancelled - {serial_number} already printed")
+                    return
+                    
             # Generate PDF label with current data
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             pdf_filename = f"output_labels/label_{timestamp}.pdf"
             
             # Generate the PDF
             self.generate_pdf_label(pdf_filename)
+            
+            # Mark as printed after successful PDF generation
+            if serial_number:
+                self.mark_as_printed(serial_number)
             
             # Cross-platform handling
             if platform.system() == 'Darwin':  # macOS
