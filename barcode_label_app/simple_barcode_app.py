@@ -71,7 +71,6 @@ class EnhancedBarcodeLabelApp:
         
         # Current data
         self.current_csv_data = None
-        self.current_label = None
         
         # UI variables (will be initialized in setup_ui)
         self.settings_status_var = None
@@ -85,14 +84,18 @@ class EnhancedBarcodeLabelApp:
             'logo_y': 6,             # 2mm * 2.834 
             'logo_width': 99,        # 35mm * 2.834
             'logo_height': 48,       # 17mm * 2.834
-            'pd_x': 127,             # 45mm * 2.834
-            'pd_y': 17,              # 6mm * 2.834
             'pn_x': 127,             # 45mm * 2.834
-            'pn_y': 40,              # 14mm * 2.834
-            'pr_x': 127,             # 45mm * 2.834
-            'pr_y': 82,              # 29mm * 2.834
+            'pn_y': 17,              # P/N - Top field (Template 1)
+            'pd_x': 127,             # 45mm * 2.834
+            'pd_y': 40,              # P/D - Second field (Template 1)
             'sn_x': 127,             # 45mm * 2.834
-            'sn_y': 130,             # 46mm * 2.834
+            'sn_y': 82,              # S/N - Third field (Template 1)
+            'po_x': 127,             # 45mm * 2.834 - PO No field
+            'po_y': 130,             # PO No - Fourth field (Template 1)
+            'qty_x': 127,            # 45mm * 2.834 - QTY field
+            'qty_y': 165,            # QTY - Bottom field (Template 1)
+            'pr_x': 127,             # 45mm * 2.834
+            'pr_y': 82,              # P/R - Third field (templates 2&3)
             'barcode_width': 255,    # 90mm * 2.834
             'barcode_height': 23,    # 8mm * 2.834
             # Font sizes for different text elements
@@ -118,8 +121,7 @@ class EnhancedBarcodeLabelApp:
         # Update UI from loaded settings
         self.update_ui_from_settings()
         
-        # Generate initial preview
-        self.update_preview()
+
     
     def get_default_logo_path(self):
         """Get default logo path relative to script location"""
@@ -288,21 +290,12 @@ class EnhancedBarcodeLabelApp:
             self.df = None
     
     def setup_ui(self):
-        """Setup enhanced UI with preview and controls"""
-        # Create main paned window - better for smaller screens
-        main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
-        main_paned.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        """Setup simplified UI with controls only"""
+        # Create main frame
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Left panel - Controls (slightly larger weight for controls)
-        left_frame = ttk.Frame(main_paned, padding="5")
-        main_paned.add(left_frame, weight=3)
-        
-        # Right panel - Preview
-        right_frame = ttk.Frame(main_paned, padding="5")
-        main_paned.add(right_frame, weight=2)
-        
-        self.setup_left_panel(left_frame)
-        self.setup_right_panel(right_frame)
+        self.setup_left_panel(main_frame)
     
     def setup_left_panel(self, parent):
         """Setup left control panel with Main and Settings tabs"""
@@ -362,7 +355,6 @@ class EnhancedBarcodeLabelApp:
         action_frame = ttk.LabelFrame(main_tab, text="Actions", padding="10")
         action_frame.pack(fill=tk.X)
         
-        ttk.Button(action_frame, text="Update Preview", command=self.update_preview).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(action_frame, text="Save Label", command=self.save_label).pack(side=tk.LEFT, padx=(0, 5))
         ttk.Button(action_frame, text="Print", command=self.print_label).pack(side=tk.LEFT)
         
@@ -576,12 +568,14 @@ class EnhancedBarcodeLabelApp:
         template_frame_inner = ttk.Frame(template_frame)
         template_frame_inner.grid(row=0, column=1, sticky=tk.EW, columnspan=2)
         
-        ttk.Radiobutton(template_frame_inner, text="Template 1 (P/D text, P/N barcode, P/R barcode, S/N barcode)", 
+        ttk.Radiobutton(template_frame_inner, text="Template 1 (P/N, P/D, S/N, PO No, QTY - all text only)", 
                        variable=self.template_var, value=1, command=self.on_template_change).pack(anchor=tk.W)
-        ttk.Radiobutton(template_frame_inner, text="Template 2 (P/D text, P/N text, S/N text, QTY text - no barcodes)", 
+        ttk.Radiobutton(template_frame_inner, text="Template 2 (P/N, P/D, S/N, QTY - all text only)", 
                        variable=self.template_var, value=2, command=self.on_template_change).pack(anchor=tk.W)
-        ttk.Radiobutton(template_frame_inner, text="Template 3 (P/D text, P/N text, S/N barcode+text, QTY text)", 
+        ttk.Radiobutton(template_frame_inner, text="Template 3 (P/N, P/D, S/N barcode+text, QTY text)", 
                        variable=self.template_var, value=3, command=self.on_template_change).pack(anchor=tk.W)
+        ttk.Radiobutton(template_frame_inner, text="Template 4 (P/N, P/D, S/N QR code+text, QTY text)", 
+                       variable=self.template_var, value=4, command=self.on_template_change).pack(anchor=tk.W)
 
         template_frame.columnconfigure(1, weight=1)
 
@@ -618,32 +612,15 @@ class EnhancedBarcodeLabelApp:
         canvas.pack(side='left', fill='both', expand=True)
         scrollbar_ctrl.pack(side='right', fill='y')
     
-    def setup_right_panel(self, parent):
-        """Setup right preview panel"""
-        # Preview section
-        preview_frame = ttk.LabelFrame(parent, text="Label Preview", padding="10")
-        preview_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Canvas for preview - more responsive
-        self.preview_canvas = tk.Canvas(preview_frame, bg='white', width=400, height=220)
-        self.preview_canvas.pack(expand=True, fill=tk.BOTH)
-        
-        # Preview info
-        info_frame = ttk.Frame(preview_frame)
-        info_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        self.preview_info = ttk.Label(info_frame, text="Preview will update automatically")
-        self.preview_info.pack()
+
     
     def on_setting_change(self, *args):
         """Called when any setting changes"""
         self.update_label_settings()
-        self.update_preview()
     
     def on_template_change(self):
         """Called when template selection changes"""
         self.update_label_settings()
-        self.update_preview()
     
 
     
@@ -688,13 +665,11 @@ class EnhancedBarcodeLabelApp:
         if filename:
             self.logo_path_var.set(filename)
             self.label_settings['logo_path'] = filename
-            self.update_preview()
     
     def clear_logo(self):
         """Clear the selected logo"""
         self.logo_path_var.set("No logo selected")
         self.label_settings['logo_path'] = None
-        self.update_preview()
     
     def browse_csv(self):
         """Browse for CSV file"""
@@ -777,7 +752,6 @@ class EnhancedBarcodeLabelApp:
             messagebox.showerror("Error", f"No range found for serial number: {serial_number}")
             self.current_csv_data = None
             self.status_var.set(f"No range found for serial: {serial_number}")
-            self.update_preview()
             return
         
         # Use first match for label generation
@@ -797,7 +771,6 @@ class EnhancedBarcodeLabelApp:
             except (ValueError, TypeError):
                 print(f"Invalid template value in CSV: {csv_template}, using default")
         
-        self.update_preview()
         self.print_label()
         self.status_var.set(f"Scanned {serial_number} - sent to printer")
         self.barcode_var.set("")
@@ -940,11 +913,76 @@ class EnhancedBarcodeLabelApp:
         
         return img
     
+    def get_unified_template_layout(self):
+        """Get unified template layout data that can be used by both PNG and PDF generators.
+        Returns layout information including field order, positions, and content for the current template."""
+        
+        # Get data from current CSV data or use defaults
+        if self.current_csv_data:
+            pd_data = self.get_field_data(['P/D', 'PD', 'DESCRIPTION', 'DESC', 'PRODUCT']) or "SCB CCA"
+            pn_data = self.get_field_data(['P/N', 'PN', 'PART', 'CPN', 'PART_NUMBER']) or "CZ5S1000B"
+            pr_data = self.get_field_data(['P/R', 'PR', 'REVISION', 'REV', 'VERSION']) or "02"
+            sn_data = self.barcode_var.get().strip() if hasattr(self, 'barcode_var') and self.barcode_var.get().strip() else "CDL2349-1195"
+            po_data = self.get_field_data(['PO', 'PO_NO', 'PO_NUMBER', 'PURCHASE_ORDER', 'ORDER_NO']) or "PO123456"
+        else:
+            pd_data = "SCB CCA"
+            pn_data = "CZ5S1000B"
+            pr_data = "02"
+            sn_data = "CDL2349-1195"
+            po_data = "PO123456"
+        
+        current_template = self.label_settings.get('template', 1)
+        settings = self.label_settings
+        
+        # Define the layout for each template
+        if current_template == 1:
+            # Template 1: P/N, P/D, S/N, PO No, QTY (all text only, no barcodes)
+            # Order from top to bottom: P/N, P/D, S/N, PO No, QTY
+            layout = [
+                {'label': 'P/N', 'data': pn_data, 'position_key': 'pn', 'has_barcode': False},
+                {'label': 'P/D', 'data': pd_data, 'position_key': 'pd', 'has_barcode': False},
+                {'label': 'S/N', 'data': sn_data, 'position_key': 'sn', 'has_barcode': False},
+                {'label': 'PO No', 'data': po_data, 'position_key': 'po', 'has_barcode': False},
+                {'label': 'QTY', 'data': "1", 'position_key': 'qty', 'has_barcode': False}
+            ]
+        elif current_template == 2:
+            # Template 2: P/N, P/D, S/N, QTY - NO barcodes (same order as Template 1 but no PO No)
+            layout = [
+                {'label': 'P/N', 'data': pn_data, 'position_key': 'pn', 'has_barcode': False},
+                {'label': 'P/D', 'data': pd_data, 'position_key': 'pd', 'has_barcode': False},
+                {'label': 'S/N', 'data': sn_data, 'position_key': 'sn', 'has_barcode': False},
+                {'label': 'QTY', 'data': "1", 'position_key': 'qty', 'has_barcode': False}
+            ]
+        elif current_template == 3:
+            # Template 3: P/N, P/D, S/N barcode+text, QTY text
+            layout = [
+                {'label': 'P/N', 'data': pn_data, 'position_key': 'pn', 'has_barcode': False},
+                {'label': 'P/D', 'data': pd_data, 'position_key': 'pd', 'has_barcode': False},
+                {'label': 'S/N', 'data': sn_data, 'position_key': 'sn', 'has_barcode': True},
+                {'label': 'QTY', 'data': "1", 'position_key': 'qty', 'has_barcode': False}
+            ]
+        elif current_template == 4:
+            # Template 4: P/N, P/D, S/N QR code+text, QTY text
+            layout = [
+                {'label': 'P/N', 'data': pn_data, 'position_key': 'pn', 'has_barcode': False},
+                {'label': 'P/D', 'data': pd_data, 'position_key': 'pd', 'has_barcode': False},
+                {'label': 'S/N', 'data': sn_data, 'position_key': 'sn', 'has_barcode': False, 'has_qrcode': True},
+                {'label': 'QTY', 'data': "1", 'position_key': 'qty', 'has_barcode': False}
+            ]
+        else:
+            # Fallback to template 1
+            layout = [
+                {'label': 'P/N', 'data': pn_data, 'position_key': 'pn', 'has_barcode': False},
+                {'label': 'P/D', 'data': pd_data, 'position_key': 'pd', 'has_barcode': False},
+                {'label': 'S/N', 'data': sn_data, 'position_key': 'sn', 'has_barcode': False},
+                {'label': 'PO No', 'data': po_data, 'position_key': 'po', 'has_barcode': False},
+                {'label': 'QTY', 'data': "1", 'position_key': 'qty', 'has_barcode': False}
+            ]
+        
+        return layout
+
     def generate_label_image(self):
-        """Generate 83mm x 32mm label with 3 template options:
-        Template 1: P/D text, P/N barcode, P/R barcode, S/N barcode
-        Template 2: P/D text, P/N text, S/N text, QTY text (no barcodes)  
-        Template 3: P/D text, P/N text, S/N barcode+text, QTY text"""
+        """Generate 83mm x 32mm label with 3 template options using unified layout."""
         settings = self.label_settings
         width = settings['width']
         height = settings['height']
@@ -991,169 +1029,48 @@ class EnhancedBarcodeLabelApp:
             # No logo - draw fallback text
             draw.text((settings['logo_x'], settings['logo_y']), "CYIENT DLM", fill='black', font=font_company)
         
-        if self.current_csv_data:
-            # Get field data from CSV
-            pd_data = self.get_field_data(['P/D', 'PD', 'DESCRIPTION', 'DESC', 'PRODUCT'])
-            pn_data = self.get_field_data(['P/N', 'PN', 'PART', 'CPN', 'PART_NUMBER'])
-            pr_data = self.get_field_data(['P/R', 'PR', 'REVISION', 'REV', 'VERSION'])
-            
-            # S/N should be the lookup input value (the barcode that was scanned/entered)
-            sn_data = self.barcode_var.get().strip() if hasattr(self, 'barcode_var') and self.barcode_var.get().strip() else "CDL2349-1195"
-            
-            # Default values if not found
-            if not pd_data: pd_data = "SCB CCA"
-            if not pn_data: pn_data = "CZ5S1000B"
-            if not pr_data: pr_data = "02"
-            
-            # Get current template (from CSV or UI setting)
-            current_template = self.label_settings.get('template', 1)
-            
-            if current_template == 1:
+        # Use unified template layout
+        layout = self.get_unified_template_layout()
         
-                # Template 1: P/D text, P/N barcode, P/R barcode, S/N barcode
-                
-                # P/D field (text only)
-                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-                draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
-                
-                # P/N field (barcode + text)
-                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-                pn_barcode = self.generate_barcode(pn_data, settings['barcode_width'], settings['barcode_height'])
-                if pn_barcode:
-                    img.paste(pn_barcode, (settings['pn_x'] + 30, settings['pn_y'] + 2))
-                else:
-                    draw.text((settings['pn_x'] + 30, settings['pn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-                draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 5), pn_data, fill='black', font=font_data)
-                
-                # P/R field (barcode + text)
-                draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
-                pr_barcode = self.generate_barcode(pr_data, settings['barcode_width'], settings['barcode_height'])
-                if pr_barcode:
-                    img.paste(pr_barcode, (settings['pr_x'] + 30, settings['pr_y'] + 2))
-                else:
-                    draw.text((settings['pr_x'] + 30, settings['pr_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-                draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 5), pr_data, fill='black', font=font_data)
-                
-                # S/N field (barcode + text)
-                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-                sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
-                if sn_barcode:
-                    img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
-                else:
-                    draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
-                
-            elif current_template == 2:
-                # Template 2: P/D text, P/N text, S/N text, QTY text - NO barcodes
-                
-                # P/D field (text only)
-                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-                draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
-                
-                # P/N field (text only)
-                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-                draw.text((settings['pn_x'] + 30, settings['pn_y']), pn_data, fill='black', font=font_data)
-                
-                # QTY field (text only) - using P/R position
-                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
-                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
-                
-                # S/N field (text only)
-                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-                draw.text((settings['sn_x'] + 30, settings['sn_y']), sn_data, fill='black', font=font_data)
-                
-            elif current_template == 3:
-                # Template 3: P/D text, P/N text, S/N barcode+text, QTY text
-                
-                # P/D field (text only)
-                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-                draw.text((settings['pd_x'] + 30, settings['pd_y']), pd_data, fill='black', font=font_data)
-                
-                # P/N field (text only)
-                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-                draw.text((settings['pn_x'] + 30, settings['pn_y']), pn_data, fill='black', font=font_data)
-                
-                # QTY field (text only) - using P/R position
-                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
-                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
-                
-                # S/N field (barcode + text) - only field with barcode in template 3
-                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-                sn_barcode = self.generate_barcode(sn_data, settings['barcode_width'], settings['barcode_height'])
-                if sn_barcode:
-                    img.paste(sn_barcode, (settings['sn_x'] + 30, settings['sn_y'] + 2))
-                else:
-                    draw.text((settings['sn_x'] + 30, settings['sn_y'] + 2), "|||||||||||||||||||", fill='black', font=font_data)
-                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 5), sn_data, fill='black', font=font_data)
-        
-        else:
-            # Sample data when no lookup performed - show based on selected template
-            current_template = self.label_settings.get('template', 1)
+        # Render fields based on layout
+        for field in layout:
+            # Calculate position
+            position_key = field['position_key']
+            x = settings[f'{position_key}_x']
+            y = settings[f'{position_key}_y']
             
-            if current_template == 1:
-                # Template 1 preview: with barcodes
-                sample_pn_barcode = self.generate_simple_barcode("CZ5S1000B", settings['barcode_width'], settings['barcode_height'])
-                sample_pr_barcode = self.generate_simple_barcode("02", settings['barcode_width'], settings['barcode_height'])
-                sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
-                
-                # P/D (text only)
-                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-                draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
-                
-                # P/N (barcode + text)
-                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-                img.paste(sample_pn_barcode, (settings['pn_x'] + 30, settings['pn_y']))
-                draw.text((settings['pn_x'] + 30, settings['pn_y'] + settings['barcode_height'] + 2), "CZ5S1000B", fill='black', font=font_data)
-                
-                # P/R (barcode + text)
-                draw.text((settings['pr_x'], settings['pr_y']), "P/R", fill='black', font=font_label)
-                img.paste(sample_pr_barcode, (settings['pr_x'] + 30, settings['pr_y']))
-                draw.text((settings['pr_x'] + 30, settings['pr_y'] + settings['barcode_height'] + 2), "02", fill='black', font=font_data)
-                
-                # S/N (barcode + text)
-                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-                img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
-                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
-                
-            elif current_template == 2:
-                # Template 2 preview: text only, no barcodes
-                
-                # P/D (text only)
-                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-                draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
-                
-                # P/N (text only)
-                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-                draw.text((settings['pn_x'] + 30, settings['pn_y']), "CZ5S1000B", fill='black', font=font_data)
-                
-                # QTY (text only)
-                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
-                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
-                
-                # S/N (text only)
-                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-                draw.text((settings['sn_x'] + 30, settings['sn_y']), "CDL2349-1195", fill='black', font=font_data)
-                
-            elif current_template == 3:
-                # Template 3 preview: only S/N has barcode
-                sample_sn_barcode = self.generate_simple_barcode("CDL2349-1195", settings['barcode_width'], settings['barcode_height'])
-                
-                # P/D (text only)
-                draw.text((settings['pd_x'], settings['pd_y']), "P/D", fill='black', font=font_label)
-                draw.text((settings['pd_x'] + 30, settings['pd_y']), "SCB CCA", fill='black', font=font_data)
-                
-                # P/N (text only)
-                draw.text((settings['pn_x'], settings['pn_y']), "P/N", fill='black', font=font_label)
-                draw.text((settings['pn_x'] + 30, settings['pn_y']), "CZ5S1000B", fill='black', font=font_data)
-                
-                # QTY (text only)
-                draw.text((settings['pr_x'], settings['pr_y']), "QTY", fill='black', font=font_label)
-                draw.text((settings['pr_x'] + 30, settings['pr_y']), "1", fill='black', font=font_data)
-                
-                # S/N (barcode + text)
-                draw.text((settings['sn_x'], settings['sn_y']), "S/N", fill='black', font=font_label)
-                img.paste(sample_sn_barcode, (settings['sn_x'] + 30, settings['sn_y']))
-                draw.text((settings['sn_x'] + 30, settings['sn_y'] + settings['barcode_height'] + 2), "CDL2349-1195", fill='black', font=font_data)
+            # Apply offsets if specified
+            y_offset = field.get('y_offset', 0)
+            y += y_offset
+            
+            # Draw field label (left-aligned)
+            draw.text((x, y), field['label'], fill='black', font=font_label)
+            
+            # Calculate consistent label width for alignment (find the widest label)
+            max_label_width = 0
+            for f in layout:
+                try:
+                    label_bbox = draw.textbbox((0, 0), f['label'], font=font_label)
+                    label_width = label_bbox[2] - label_bbox[0]
+                    max_label_width = max(max_label_width, label_width)
+                except:
+                    # Fallback if textbbox not available
+                    max_label_width = max(max_label_width, len(f['label']) * 8)
+            
+            # Add consistent spacing after the widest label
+            value_x = x + max_label_width + 10  # 10px padding after label
+            
+            if field['has_barcode']:
+                # Draw barcode + text below
+                barcode_img = self.generate_barcode(field['data'], settings['barcode_width'], settings['barcode_height'])
+                if barcode_img:
+                    img.paste(barcode_img, (value_x, y + 2))
+                else:
+                    draw.text((value_x, y + 2), "|||||||||||||||||||", fill='black', font=font_data)
+                draw.text((value_x, y + settings['barcode_height'] + 5), field['data'], fill='black', font=font_data)
+            else:
+                # Draw text only - aligned to the same x position for all values
+                draw.text((value_x, y), field['data'], fill='black', font=font_data)
         
         return img
     
@@ -1213,52 +1130,7 @@ class EnhancedBarcodeLabelApp:
                     return str(value)
         return None
     
-    def update_preview(self):
-        """Update the label preview"""
-        try:
-            # Generate label
-            self.current_label = self.generate_label_image()
-            
-            # Clear canvas
-            self.preview_canvas.delete("all")
-            
-            # Convert PIL image to PhotoImage for display
-            preview_img = self.current_label.copy()
-            
-            # Scale to fit canvas while maintaining aspect ratio
-            canvas_width = self.preview_canvas.winfo_width()
-            canvas_height = self.preview_canvas.winfo_height()
-            
-            if canvas_width > 1 and canvas_height > 1:  # Canvas is ready
-                img_width, img_height = preview_img.size
-                
-                # Calculate scaling
-                scale_x = (canvas_width - 20) / img_width
-                scale_y = (canvas_height - 20) / img_height
-                scale = min(scale_x, scale_y, 1.0)  # Don't scale up
-                
-                new_width = int(img_width * scale)
-                new_height = int(img_height * scale)
-                
-                preview_img = preview_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                
-                # Convert to PhotoImage
-                from PIL import ImageTk
-                self.preview_photo = ImageTk.PhotoImage(preview_img)
-                
-                # Center on canvas
-                x = (canvas_width - new_width) // 2
-                y = (canvas_height - new_height) // 2
-                
-                self.preview_canvas.create_image(x, y, anchor=tk.NW, image=self.preview_photo)
-                
-                # Update info
-                self.preview_info.config(text=f"Preview: {self.label_settings['width']}x{self.label_settings['height']}px")
-            
-        except Exception as e:
-            print(f"Error updating preview: {e}")
-            self.preview_canvas.delete("all")
-            self.preview_canvas.create_text(225, 125, text=f"Preview Error: {e}", anchor=tk.CENTER)
+
     
     def save_label(self):
         """Save the current label as PDF"""
@@ -1269,16 +1141,13 @@ class EnhancedBarcodeLabelApp:
             # Generate PDF label
             self.generate_pdf_label(filename)
             
-            # Also save PNG preview for reference
-            if self.current_label:
-                png_filename = f"output_labels/label_{timestamp}.png"
-                self.current_label.save(png_filename, 'PNG', dpi=(300, 300))
-                
-                messagebox.showinfo("Success", f"Label saved as:\nPDF: {filename}\nPNG Preview: {png_filename}")
-                self.status_var.set(f"Label saved: {os.path.basename(filename)} + PNG preview")
-            else:
-                messagebox.showinfo("Success", f"Label saved as PDF:\n{filename}")
-                self.status_var.set(f"Label saved: {os.path.basename(filename)}")
+            # Also generate and save PNG for reference
+            png_filename = f"output_labels/label_{timestamp}.png"
+            label_img = self.generate_label_image()
+            label_img.save(png_filename, 'PNG', dpi=(300, 300))
+            
+            messagebox.showinfo("Success", f"Label saved as:\nPDF: {filename}\nPNG Preview: {png_filename}")
+            self.status_var.set(f"Label saved: {os.path.basename(filename)} + PNG preview")
             
         except Exception as e:
             messagebox.showerror("Error", f"Error saving label: {e}")
@@ -1550,12 +1419,9 @@ class EnhancedBarcodeLabelApp:
         self.current_csv_data = None
         self.barcode_entry.focus()
         self.status_var.set("Cleared - Ready for new serial number lookup")
-        self.update_preview()
     
     def run(self):
         """Start the application"""
-        # Bind canvas resize event to update preview
-        self.preview_canvas.bind('<Configure>', lambda e: self.root.after(100, self.update_preview))
         self.root.mainloop()
 
     def add_logo_to_canvas(self, canvas_obj, logo_path, x_mm, y_mm, width_mm, height_mm):
@@ -1744,136 +1610,75 @@ class EnhancedBarcodeLabelApp:
             pr_data = "02"
             sn_data = "CDL2349-1195"
         
-        # 2. P/D field (text only, no barcode)
-        c.setFillColor(black)
-        c.setFont("Helvetica-Bold", 10)
-        pd_y = field_positions_mm['P/D']
-        c.drawString(config_mm['field_start_x'] * mm , self.flip_y(pd_y + 3, label_height), "P/D")
+        # Use unified template layout
+        layout = self.get_unified_template_layout()
         
-        c.setFont("Helvetica", 8)
-        c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                     self.flip_y(pd_y + 3, label_height), pd_data)
+        # Calculate label spacing for alignment (similar to PNG)
+        label_widths = []
+        for field in layout:
+            # Estimate label width in mm for PDF (rough calculation)
+            estimated_width = len(field['label']) * 2.5  # ~2.5mm per character
+            label_widths.append(estimated_width)
         
-        # Get current template (from CSV or UI setting)
+        max_label_width = max(label_widths) if label_widths else 20
+        value_x_offset = max_label_width + 5  # 5mm padding after label
+        
+        # Base Y positions in mm for each field (Template 1 order: P/N, P/D, S/N, PO No, QTY)
+        # Note: In PDF coordinate system with flip_y, lower Y values appear at the top
+        base_y_positions = {
+            'pn': 7,   # P/N - Top field (Template 1)
+            'pd': 18,  # P/D - Second field (Template 1) 
+            'sn': 29,  # S/N - Third field (Template 1)
+            'po': 40,  # PO No - Fourth field (Template 1)
+            'qty': 50, # QTY - Bottom field (Template 1)
+            'pr': 30   # P/R - Third field (templates 2&3)
+        }
+        
+        # Get current template for position adjustment
         current_template = self.label_settings.get('template', 1)
         
-        if current_template == 1:
-            # Template 1: P/D text, P/N barcode, P/R barcode, S/N barcode
+        # Render fields based on layout
+        for i, field in enumerate(layout):
+            # Calculate position in mm
+            position_key = field['position_key']
             
-            # P/N field (with barcode)
+            # For Templates 2 & 3, adjust QTY position to be closer to S/N (no gap for missing PO No)
+            if current_template == 2 and position_key == 'qty':
+                y_pos = 40  # Move QTY up to where PO No would be
+            elif current_template == 3 and position_key == 'qty':
+                y_pos = 45  # For Template 3, give more space due to S/N barcode height
+            else:
+                y_pos = base_y_positions.get(position_key, 25)  # Default middle position
+            
+            # Apply Y offset if specified (convert pixels to mm for consistency)
+            y_offset = field.get('y_offset', 0)
+            if y_offset != 0:
+                y_pos += y_offset / 3.78  # Convert pixels to mm (rough conversion)
+            
+            # Draw field label (left-aligned)
             c.setFont("Helvetica-Bold", 10)
-            pn_y = field_positions_mm['P/N']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
+            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(y_pos, label_height), field['label'])
             
-            # Draw P/N barcode
-            self.create_barcode_directly(c, pn_data, 
-                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                                   self.flip_y(pn_y + config_mm['barcode_height'] + 1, label_height),
-                                   config_mm['barcode_width'], config_mm['barcode_height'])
+            # Draw field value (aligned consistently)
+            value_x = config_mm['field_start_x'] + value_x_offset
             
-            # P/N text below barcode
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                         self.flip_y(pn_y + config_mm['barcode_height'] + 4, label_height), pn_data)
-            
-            # P/R field (with barcode)
-            c.setFont("Helvetica-Bold", 10)
-            pr_y = field_positions_mm['P/R']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "P/R")
-            
-            # Draw P/R barcode
-            self.create_barcode_directly(c, pr_data, 
-                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                                   self.flip_y(pr_y + config_mm['barcode_height'] + 1, label_height),
-                                   config_mm['barcode_width'], config_mm['barcode_height'])
-            
-            # P/R text below barcode
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                         self.flip_y(pr_y + config_mm['barcode_height'] + 4, label_height), pr_data)
-            
-            # S/N field (with barcode)
-            c.setFont("Helvetica-Bold", 10)
-            sn_y = field_positions_mm['S/N']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
-            
-            # Draw S/N barcode
-            self.create_barcode_directly(c, sn_data, 
-                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                                   self.flip_y(sn_y + config_mm['barcode_height'] + 1, label_height),
-                                   config_mm['barcode_width'], config_mm['barcode_height'])
-            
-            # S/N text below barcode
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                         self.flip_y(sn_y + config_mm['barcode_height'] + 4, label_height), sn_data)
+            if field['has_barcode']:
+                # Draw barcode for S/N field
+                self.create_barcode_directly(c, field['data'], 
+                                       value_x * mm, 
+                                       self.flip_y(y_pos + config_mm['barcode_height'] - 2, label_height),
+                                       config_mm['barcode_width'], config_mm['barcode_height'])
+                
+                # Draw text below barcode
+                c.setFont("Helvetica", 8)
+                c.drawString(value_x * mm, 
+                           self.flip_y(y_pos + config_mm['barcode_height'] + 3, label_height), field['data'])
+            else:
+                # Draw text only - aligned consistently
+                c.setFont("Helvetica", 8)
+                c.drawString(value_x * mm, self.flip_y(y_pos, label_height), field['data'])
         
-        elif current_template == 2:
-            # Template 2: P/D text, P/N text, S/N text, QTY text - NO barcodes
-            
-            # P/N field (text only)
-            c.setFont("Helvetica-Bold", 10)
-            pn_y = field_positions_mm['P/N']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
-            
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                         self.flip_y(pn_y + 3, label_height), pn_data)
-            
-            # QTY field (text only) - using P/R position
-            c.setFont("Helvetica-Bold", 10)
-            pr_y = field_positions_mm['P/R']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "QTY")
-            
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                         self.flip_y(pr_y + 3, label_height), "1")
-            
-            # S/N field (text only)
-            c.setFont("Helvetica-Bold", 10)
-            sn_y = field_positions_mm['S/N']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
-            
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                         self.flip_y(sn_y + 3, label_height), sn_data)
-        
-        elif current_template == 3:
-            # Template 3: P/D text, P/N text, S/N barcode+text, QTY text
-            
-            # P/N field (text only)
-            c.setFont("Helvetica-Bold", 10)
-            pn_y = field_positions_mm['P/N']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pn_y + 3, label_height), "P/N")
-            
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                         self.flip_y(pn_y + 3, label_height), pn_data)
-            
-            # QTY field (text only) - using P/R position  
-            c.setFont("Helvetica-Bold", 10)
-            pr_y = field_positions_mm['P/R']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(pr_y + 3, label_height), "QTY")
-            
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                         self.flip_y(pr_y + 3, label_height), "1")
-            
-            # S/N field (with barcode) - only field with barcode in template 3
-            c.setFont("Helvetica-Bold", 10)
-            sn_y = field_positions_mm['S/N']
-            c.drawString(config_mm['field_start_x'] * mm, self.flip_y(sn_y + 3, label_height), "S/N")
-            
-            # Draw S/N barcode
-            self.create_barcode_directly(c, sn_data, 
-                                   (config_mm['field_start_x'] + config_mm['text_offset']) * mm, 
-                                   self.flip_y(sn_y + config_mm['barcode_height'] + 1, label_height),
-                                   config_mm['barcode_width'], config_mm['barcode_height'])
-            
-            # S/N text below barcode
-            c.setFont("Helvetica", 8)
-            c.drawString((config_mm['field_start_x'] + config_mm['text_offset']+config_mm['text_bc_offset']) * mm, 
-                         self.flip_y(sn_y + config_mm['barcode_height'] + 4, label_height), sn_data)
+
         
         # Save the PDF
         c.save()
