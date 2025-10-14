@@ -762,7 +762,7 @@ class EnhancedBarcodeLabelApp:
         if csv_template:
             try:
                 template_num = int(csv_template)
-                if template_num in [1, 2, 3]:
+                if template_num in [1, 2, 3,4]:
                     self.template_var.set(template_num)
                     self.label_settings['template'] = template_num
                     print(f"Using template {template_num} from CSV")
@@ -912,6 +912,71 @@ class EnhancedBarcodeLabelApp:
                 x += bar_width
         
         return img
+    
+    def generate_qr_code(self, data, width=100, height=100):
+        """Generate a QR code for the given data"""
+        try:
+            import qrcode
+            
+            # Create QR code instance
+            qr = qrcode.QRCode(
+                version=1,  # Auto-adjust size
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=4,
+                border=1,
+            )
+            
+            # Add data and make QR code
+            qr.add_data(data)
+            qr.make(fit=True)
+            
+            # Create image
+            qr_img = qr.make_image(fill_color="black", back_color="white")
+            
+            # Convert to RGB if needed
+            if qr_img.mode != 'RGB':
+                qr_img = qr_img.convert('RGB')
+            
+            # Resize to target size
+            qr_img = qr_img.resize((width, height), Image.Resampling.LANCZOS)
+            
+            return qr_img
+            
+        except ImportError:
+            print(f"QR code library not available, generating placeholder for: {data}")
+            # Fallback: create a simple square pattern as placeholder
+            img = Image.new('RGB', (width, height), 'white')
+            draw = ImageDraw.Draw(img)
+            
+            # Draw a simple pattern that looks like a QR code
+            draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
+            
+            # Draw some QR-like patterns
+            block_size = width // 10
+            for i in range(0, width, block_size * 2):
+                for j in range(0, height, block_size * 2):
+                    draw.rectangle([i, j, i + block_size, j + block_size], fill='black')
+            
+            # Add corner squares (typical QR code markers)
+            corner_size = width // 4
+            positions = [(5, 5), (width - corner_size - 5, 5), (5, height - corner_size - 5)]
+            for x, y in positions:
+                draw.rectangle([x, y, x + corner_size, y + corner_size], outline='black', width=3)
+                inner_size = corner_size // 3
+                inner_x = x + (corner_size - inner_size) // 2
+                inner_y = y + (corner_size - inner_size) // 2
+                draw.rectangle([inner_x, inner_y, inner_x + inner_size, inner_y + inner_size], fill='black')
+            
+            return img
+        
+        except Exception as e:
+            print(f"Error generating QR code for '{data}': {e}")
+            # Final fallback
+            img = Image.new('RGB', (width, height), 'white')
+            draw = ImageDraw.Draw(img)
+            draw.rectangle([0, 0, width-1, height-1], outline='black', width=2)
+            draw.text((width//4, height//2-5), "QR", fill='black')
+            return img
     
     def get_unified_template_layout(self):
         """Get unified template layout data that can be used by both PNG and PDF generators.
@@ -1068,6 +1133,20 @@ class EnhancedBarcodeLabelApp:
                 else:
                     draw.text((value_x, y + 2), "|||||||||||||||||||", fill='black', font=font_data)
                 draw.text((value_x, y + settings['barcode_height'] + 5), field['data'], fill='black', font=font_data)
+            elif field.get('has_qrcode', False):
+                # For QR code, position on the right side of the label to avoid overlap
+                qr_size = min(100, settings['barcode_height'] * 2)  # Smaller, square QR code
+                qr_x = width - qr_size - 20  # Position on right side with 20px margin
+                qr_y = 30  # Center vertically in label
+                
+                qr_img = self.generate_qr_code(field['data'], qr_size, qr_size)
+                if qr_img:
+                    img.paste(qr_img, (qr_x, qr_y))
+                else:
+                    draw.text((qr_x, qr_y), "QR", fill='black', font=font_data)
+                
+                # For Template 4, also draw S/N label and text on the left as usual (without QR)
+                draw.text((value_x, y), field['data'], fill='black', font=font_data)
             else:
                 # Draw text only - aligned to the same x position for all values
                 draw.text((value_x, y), field['data'], fill='black', font=font_data)
@@ -1511,6 +1590,42 @@ class EnhancedBarcodeLabelApp:
             canvas_obj.rect(x, y, width_mm * mm, height_mm * mm, fill=0, stroke=1)
             return False
 
+    def create_qr_code_directly(self, canvas_obj, data, x, y, size_mm):
+        """Create a QR code directly on the canvas"""
+        try:
+            # Generate QR code as image
+            qr_img = self.generate_qr_code(data, int(size_mm * 10), int(size_mm * 10))  # Convert mm to rough pixels
+            
+            # Save QR code as temporary image
+            import tempfile
+            import os
+            
+            with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                qr_img.save(temp_file.name, 'PNG')
+                temp_filename = temp_file.name
+            
+            # Draw the QR code image on canvas
+            canvas_obj.drawImage(temp_filename, x, y, size_mm * mm, size_mm * mm)
+            
+            # Clean up temporary file
+            os.unlink(temp_filename)
+            
+            return True
+            
+        except Exception as e:
+            print(f"Error creating QR code for '{data}': {e}")
+            # Draw a placeholder rectangle if QR code fails
+            canvas_obj.setStrokeColor(black)
+            canvas_obj.setFillColor("lightgray")
+            canvas_obj.rect(x, y, size_mm * mm, size_mm * mm, fill=1, stroke=1)
+            
+            # Add "QR" text
+            canvas_obj.setFillColor(black)
+            canvas_obj.setFont("Helvetica", 8)
+            canvas_obj.drawString(x + (size_mm * mm / 3), y + (size_mm * mm / 2), "QR")
+            
+            return False
+
     def flip_y(self, y_mm, label_height):
         """Convert top-left Y coordinate to bottom-left for reportlab"""
         return label_height - (y_mm * mm)
@@ -1538,6 +1653,7 @@ class EnhancedBarcodeLabelApp:
             'barcode_height': 8, # 23px ≈ 8mm
             'field_gap': 5.3,     # Gap between fields
             'text_bc_offset': 0,  # Text barcode offset
+            'label_width': label_width_mm,  # Total label width
         }
         
         # Field positions in mm (converted from pixel positions)
@@ -1642,11 +1758,13 @@ class EnhancedBarcodeLabelApp:
             # Calculate position in mm
             position_key = field['position_key']
             
-            # For Templates 2 & 3, adjust QTY position to be closer to S/N (no gap for missing PO No)
+            # For Templates 2, 3 & 4, adjust QTY position to be closer to S/N (no gap for missing PO No)
             if current_template == 2 and position_key == 'qty':
                 y_pos = 40  # Move QTY up to where PO No would be
             elif current_template == 3 and position_key == 'qty':
                 y_pos = 45  # For Template 3, give more space due to S/N barcode height
+            elif current_template == 4 and position_key == 'qty':
+                y_pos = 45  # For Template 4, give more space due to S/N QR code height
             else:
                 y_pos = base_y_positions.get(position_key, 25)  # Default middle position
             
@@ -1673,6 +1791,20 @@ class EnhancedBarcodeLabelApp:
                 c.setFont("Helvetica", 8)
                 c.drawString(value_x * mm, 
                            self.flip_y(y_pos + config_mm['barcode_height'] + 3, label_height), field['data'])
+            elif field.get('has_qrcode', False):
+                # For QR code, position on the right side of the label to avoid overlap
+                qr_size_mm = 25  # Fixed square QR code size in mm
+                qr_x_mm = config_mm['label_width'] - qr_size_mm - 5  # Position on right side with 5mm margin
+                qr_y_mm = 15  # Center vertically in label
+                
+                self.create_qr_code_directly(c, field['data'], 
+                                       qr_x_mm * mm, 
+                                       self.flip_y(qr_y_mm + qr_size_mm, label_height),
+                                       qr_size_mm)
+                
+                # For Template 4, also draw S/N label and text on the left as usual (without QR)
+                c.setFont("Helvetica", 8)
+                c.drawString(value_x * mm, self.flip_y(y_pos, label_height), field['data'])
             else:
                 # Draw text only - aligned consistently
                 c.setFont("Helvetica", 8)
